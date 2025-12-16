@@ -970,11 +970,9 @@
                         console.log(`Point ${i}: pixel(${pixelPoint.x}, ${pixelPoint.y}) -> hoursOfSun: ${hoursOfSun}`);
 
                         if (hoursOfSun !== null && hoursOfSun !== undefined && !isNaN(hoursOfSun)) {
-                            const totalPossibleHours = (endDate - startDate) / (1000 * 60 * 60);
-                            const daylightHours = totalPossibleHours * 0.5;
-                            const sunExposure = (hoursOfSun / daylightHours) * 100;
-
-                            const avgHoursPerDay = hoursOfSun / ((endDate - startDate) / (1000 * 60 * 60 * 24));
+                            // Calculate sun exposure as percentage of the specified time window
+                            const totalWindowHours = (endDate - startDate) / (1000 * 60 * 60);
+                            const sunExposure = (hoursOfSun / totalWindowHours) * 100;
 
                             results.push({
                                 rank: 0,
@@ -984,8 +982,8 @@
                                 corners: point.corners,
                                 orientation: point.orientation || 0,
                                 sunExposure: Math.min(100, sunExposure),
-                                hoursOfSun: avgHoursPerDay,
-                                totalHours: hoursOfSun
+                                hoursOfSun: hoursOfSun,  // Actual hours of sun in the time window
+                                totalWindowHours: totalWindowHours  // Total hours in the time window
                             });
                         } else {
                             console.warn(`Point ${i}: getHoursOfSun returned invalid value: ${hoursOfSun}`);
@@ -999,13 +997,20 @@
 
                 console.log(`Analysis complete. ${results.length} valid results out of ${maxPoints} points.`);
                 map.removeLayer(analysisShadeMap);
-                
+
+                // Sort by sun exposure (best first)
                 results.sort((a, b) => b.sunExposure - a.sunExposure);
-                results.forEach((result, index) => {
+
+                // Filter out overlapping positions, keeping the best one for each location
+                const filteredResults = filterOverlappingResults(results, 10);
+                console.log(`After filtering overlaps: ${filteredResults.length} non-overlapping positions`);
+
+                // Re-rank the filtered results
+                filteredResults.forEach((result, index) => {
                     result.rank = index + 1;
                 });
 
-                return results.slice(0, 10);
+                return filteredResults;
                 
             } catch (error) {
                 console.error('Error in sun exposure calculation:', error);
@@ -1019,12 +1024,66 @@
             for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
                 const xi = polygon[i].lat, yi = polygon[i].lng;
                 const xj = polygon[j].lat, yj = polygon[j].lng;
-                
+
                 const intersect = ((yi > point.lng) !== (yj > point.lng))
                     && (point.lat < (xj - xi) * (point.lng - yi) / (yj - yi) + xi);
                 if (intersect) inside = !inside;
             }
             return inside;
+        }
+
+        // Check if two polygons overlap by testing if any corner of one is inside the other
+        function doPolygonsOverlap(corners1, corners2) {
+            // Check if any corner of polygon1 is inside polygon2
+            for (const corner of corners1) {
+                if (isPointInPolygon(corner, corners2)) {
+                    return true;
+                }
+            }
+            // Check if any corner of polygon2 is inside polygon1
+            for (const corner of corners2) {
+                if (isPointInPolygon(corner, corners1)) {
+                    return true;
+                }
+            }
+            // Also check if centers are close (for edge cases)
+            const center1 = {
+                lat: corners1.reduce((sum, c) => sum + c.lat, 0) / corners1.length,
+                lng: corners1.reduce((sum, c) => sum + c.lng, 0) / corners1.length
+            };
+            const center2 = {
+                lat: corners2.reduce((sum, c) => sum + c.lat, 0) / corners2.length,
+                lng: corners2.reduce((sum, c) => sum + c.lng, 0) / corners2.length
+            };
+            if (isPointInPolygon(center1, corners2) || isPointInPolygon(center2, corners1)) {
+                return true;
+            }
+            return false;
+        }
+
+        // Filter results to remove overlapping positions, keeping the best one
+        function filterOverlappingResults(sortedResults, maxResults = 10) {
+            const nonOverlapping = [];
+
+            for (const result of sortedResults) {
+                let overlaps = false;
+
+                for (const selected of nonOverlapping) {
+                    if (doPolygonsOverlap(result.corners, selected.corners)) {
+                        overlaps = true;
+                        break;
+                    }
+                }
+
+                if (!overlaps) {
+                    nonOverlapping.push(result);
+                    if (nonOverlapping.length >= maxResults) {
+                        break;
+                    }
+                }
+            }
+
+            return nonOverlapping;
         }
 
         function displayResults(results) {
@@ -1047,7 +1106,7 @@
                 item.innerHTML = `
                     <span class="result-rank ${rankClass}">#${result.rank}</span>
                     <div class="result-exposure" style="color: ${exposureColor};">${result.sunExposure.toFixed(1)}% Sun Exposure</div>
-                    <div>≈ ${result.hoursOfSun.toFixed(1)} hours/day of direct sun</div>
+                    <div>${result.hoursOfSun.toFixed(1)} hrs sun / ${result.totalWindowHours.toFixed(1)} hrs window</div>
                     <div><strong>Orientation:</strong> ${orientationLabel}</div>
                     <div class="result-coords">
                         ${result.center.lat.toFixed(6)}, ${result.center.lng.toFixed(6)}
@@ -1077,7 +1136,7 @@
                 marker.bindPopup(`
                     <strong>Spot #${result.rank}</strong><br>
                     Sun Exposure: ${result.sunExposure.toFixed(1)}%<br>
-                    Hours/day: ${result.hoursOfSun.toFixed(1)}<br>
+                    ${result.hoursOfSun.toFixed(1)} hrs / ${result.totalWindowHours.toFixed(1)} hrs<br>
                     Orientation: ${orientationLabel}
                 `);
 
@@ -1153,9 +1212,18 @@
                 try {
                     if (typeof shadeMapLayer.remove === 'function') {
                         shadeMapLayer.remove();
-                    } else {
+                    }
+                    if (map.hasLayer && map.hasLayer(shadeMapLayer)) {
                         map.removeLayer(shadeMapLayer);
                     }
+                    // Remove any lingering canvas elements
+                    const mapContainer = document.getElementById('map');
+                    const canvases = mapContainer.querySelectorAll('canvas');
+                    canvases.forEach(canvas => {
+                        if (canvas.className.includes('shade') || canvas.style.position === 'absolute') {
+                            canvas.remove();
+                        }
+                    });
                     shadeMapLayer = null;
                 } catch (e) {
                     console.log('Error removing previous shade map:', e);
@@ -1221,19 +1289,29 @@
         document.getElementById('removeShadeBtn').addEventListener('click', function() {
             if (shadeMapLayer) {
                 try {
-                    // Try the ShadeMap's own remove method first
+                    // Try multiple removal approaches
                     if (typeof shadeMapLayer.remove === 'function') {
                         shadeMapLayer.remove();
-                    } else {
-                        // Fall back to Leaflet's removeLayer
+                    }
+                    if (map.hasLayer && map.hasLayer(shadeMapLayer)) {
                         map.removeLayer(shadeMapLayer);
                     }
+
+                    // Also try to find and remove any canvas elements added by shadeMap
+                    const mapContainer = document.getElementById('map');
+                    const canvases = mapContainer.querySelectorAll('canvas');
+                    canvases.forEach(canvas => {
+                        // Remove canvases that might be from shadeMap (not the base Leaflet ones)
+                        if (canvas.className.includes('shade') || canvas.style.position === 'absolute') {
+                            canvas.remove();
+                        }
+                    });
+
                     shadeMapLayer = null;
                     showMessage('Overlay removed', 'success');
                     this.style.display = 'none';
                 } catch (e) {
                     console.error('Error removing shade map:', e);
-                    // Force cleanup even if removal failed
                     shadeMapLayer = null;
                     this.style.display = 'none';
                     showMessage('Overlay removed (with warnings)', 'success');
