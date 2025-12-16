@@ -940,7 +940,8 @@
                 console.log('Sun exposure mode enabled, starting analysis...');
 
                 const results = [];
-                const maxPoints = Math.min(points.length, 50);
+                // Analyze more points to ensure we can find 10 non-overlapping spots
+                const maxPoints = Math.min(points.length, 200);
 
                 for (let i = 0; i < maxPoints; i++) {
                     const point = points[i];
