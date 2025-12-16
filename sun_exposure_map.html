@@ -1018,7 +1018,27 @@
             return inside;
         }
 
-        // Check if two polygons overlap by testing if any corner of one is inside the other
+        // Check if two line segments intersect
+        function doLinesIntersect(p1, p2, p3, p4) {
+            // Line segment 1: p1 to p2
+            // Line segment 2: p3 to p4
+            const d1 = direction(p3, p4, p1);
+            const d2 = direction(p3, p4, p2);
+            const d3 = direction(p1, p2, p3);
+            const d4 = direction(p1, p2, p4);
+
+            if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+                ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
+                return true;
+            }
+            return false;
+        }
+
+        function direction(p1, p2, p3) {
+            return (p3.lng - p1.lng) * (p2.lat - p1.lat) - (p3.lat - p1.lat) * (p2.lng - p1.lng);
+        }
+
+        // Check if two polygons overlap by testing corners AND edge intersections
         function doPolygonsOverlap(corners1, corners2) {
             // Check if any corner of polygon1 is inside polygon2
             for (const corner of corners1) {
@@ -1032,18 +1052,22 @@
                     return true;
                 }
             }
-            // Also check if centers are close (for edge cases)
-            const center1 = {
-                lat: corners1.reduce((sum, c) => sum + c.lat, 0) / corners1.length,
-                lng: corners1.reduce((sum, c) => sum + c.lng, 0) / corners1.length
-            };
-            const center2 = {
-                lat: corners2.reduce((sum, c) => sum + c.lat, 0) / corners2.length,
-                lng: corners2.reduce((sum, c) => sum + c.lng, 0) / corners2.length
-            };
-            if (isPointInPolygon(center1, corners2) || isPointInPolygon(center2, corners1)) {
-                return true;
+
+            // Check if any edges intersect (handles perpendicular/crossing rectangles)
+            for (let i = 0; i < corners1.length; i++) {
+                const a1 = corners1[i];
+                const a2 = corners1[(i + 1) % corners1.length];
+
+                for (let j = 0; j < corners2.length; j++) {
+                    const b1 = corners2[j];
+                    const b2 = corners2[(j + 1) % corners2.length];
+
+                    if (doLinesIntersect(a1, a2, b1, b2)) {
+                        return true;
+                    }
+                }
             }
+
             return false;
         }
 
