@@ -1208,6 +1208,7 @@
                 return;
             }
 
+            // Remove any existing overlay first
             if (shadeMapLayer) {
                 try {
                     if (typeof shadeMapLayer.remove === 'function') {
@@ -1216,19 +1217,17 @@
                     if (map.hasLayer && map.hasLayer(shadeMapLayer)) {
                         map.removeLayer(shadeMapLayer);
                     }
-                    // Remove any lingering canvas elements
-                    const mapContainer = document.getElementById('map');
-                    const canvases = mapContainer.querySelectorAll('canvas');
-                    canvases.forEach(canvas => {
-                        if (canvas.className.includes('shade') || canvas.style.position === 'absolute') {
-                            canvas.remove();
-                        }
-                    });
-                    shadeMapLayer = null;
                 } catch (e) {
                     console.log('Error removing previous shade map:', e);
-                    shadeMapLayer = null;
                 }
+                shadeMapLayer = null;
+            }
+
+            // Aggressively remove ALL canvas elements from overlay panes
+            const overlayPane = document.querySelector('.leaflet-overlay-pane');
+            if (overlayPane) {
+                const canvases = overlayPane.querySelectorAll('canvas');
+                canvases.forEach(canvas => canvas.remove());
             }
 
             // Fetch building data from OpenStreetMap
@@ -1266,6 +1265,11 @@
                 console.log('Creating shade map with config:', baseConfig);
                 shadeMapLayer = L.shadeMap(baseConfig).addTo(map);
 
+                showMessage('Loading terrain data...', 'success');
+
+                // Wait for initial terrain to load
+                await new Promise(resolve => shadeMapLayer.on('idle', resolve));
+
                 // Enable sun exposure mode via the API method
                 const iterations = parseInt(document.getElementById('sunExposureIterations').value);
 
@@ -1275,8 +1279,13 @@
                     endDate: endDate,
                     iterations: iterations
                 });
-                console.log('Sun exposure mode enabled');
 
+                showMessage('Calculating sun exposure...', 'success');
+
+                // Wait for sun exposure calculation to complete
+                await new Promise(resolve => shadeMapLayer.on('idle', resolve));
+
+                console.log('Sun exposure mode enabled');
                 showMessage('Sun exposure overlay applied!', 'success');
                 document.getElementById('removeShadeBtn').style.display = 'block';
                 console.log('Shade map created successfully');
@@ -1287,35 +1296,44 @@
         });
 
         document.getElementById('removeShadeBtn').addEventListener('click', function() {
-            if (shadeMapLayer) {
-                try {
-                    // Try multiple removal approaches
-                    if (typeof shadeMapLayer.remove === 'function') {
-                        shadeMapLayer.remove();
-                    }
-                    if (map.hasLayer && map.hasLayer(shadeMapLayer)) {
-                        map.removeLayer(shadeMapLayer);
-                    }
+            try {
+                // Try the shadeMap's own remove method
+                if (shadeMapLayer && typeof shadeMapLayer.remove === 'function') {
+                    shadeMapLayer.remove();
+                }
+                if (shadeMapLayer && map.hasLayer && map.hasLayer(shadeMapLayer)) {
+                    map.removeLayer(shadeMapLayer);
+                }
 
-                    // Also try to find and remove any canvas elements added by shadeMap
-                    const mapContainer = document.getElementById('map');
-                    const canvases = mapContainer.querySelectorAll('canvas');
+                // Aggressively remove ALL canvas elements from overlay panes
+                // The shadeMap adds canvas elements to leaflet-overlay-pane
+                const overlayPane = document.querySelector('.leaflet-overlay-pane');
+                if (overlayPane) {
+                    const canvases = overlayPane.querySelectorAll('canvas');
+                    canvases.forEach(canvas => canvas.remove());
+                    console.log(`Removed ${canvases.length} canvas elements from overlay pane`);
+                }
+
+                // Also check the map pane
+                const mapPane = document.querySelector('.leaflet-map-pane');
+                if (mapPane) {
+                    const canvases = mapPane.querySelectorAll('canvas');
                     canvases.forEach(canvas => {
-                        // Remove canvases that might be from shadeMap (not the base Leaflet ones)
-                        if (canvas.className.includes('shade') || canvas.style.position === 'absolute') {
+                        // Don't remove tile layer canvases
+                        if (!canvas.closest('.leaflet-tile-pane')) {
                             canvas.remove();
                         }
                     });
-
-                    shadeMapLayer = null;
-                    showMessage('Overlay removed', 'success');
-                    this.style.display = 'none';
-                } catch (e) {
-                    console.error('Error removing shade map:', e);
-                    shadeMapLayer = null;
-                    this.style.display = 'none';
-                    showMessage('Overlay removed (with warnings)', 'success');
                 }
+
+                shadeMapLayer = null;
+                showMessage('Overlay removed', 'success');
+                this.style.display = 'none';
+            } catch (e) {
+                console.error('Error removing shade map:', e);
+                shadeMapLayer = null;
+                this.style.display = 'none';
+                showMessage('Overlay removed (with warnings)', 'success');
             }
         });
 
