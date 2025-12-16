@@ -369,6 +369,12 @@
         </div>
 
         <div class="control-group">
+            <label>Max Positions to Analyze:</label>
+            <input type="number" id="maxPositions" value="0" min="0" max="10000">
+            <div class="info">0 = analyze all positions</div>
+        </div>
+
+        <div class="control-group">
             <button id="analyzeBtn" disabled>🔍 Analyze Parking Spots</button>
             <div class="info" id="analysisInfo">Draw a parking lot first</div>
         </div>
@@ -868,8 +874,12 @@
                 }
             }
 
+            // Get user's max positions setting for the message
+            const userMaxPositions = parseInt(document.getElementById('maxPositions').value) || 0;
+            const analysisCount = userMaxPositions > 0 ? Math.min(testPoints.length, userMaxPositions) : testPoints.length;
+
             document.getElementById('analysisProgress').textContent =
-                `Analyzing ${testPoints.length} possible positions (${orientations.length} orientations each) using Shadow Map API...`;
+                `Found ${testPoints.length} possible positions. Analyzing ${analysisCount}...`;
 
             const results = await calculateRealSunExposure(testPoints, apiKey);
 
@@ -945,15 +955,17 @@
                 console.log('Sun exposure mode enabled, starting analysis...');
 
                 const results = [];
-                // Analyze more points to ensure we can find 10 non-overlapping spots
-                // With 12 orientations per position, we need many grid points
-                const maxPoints = Math.min(points.length, 500);
+                // Get user's max positions setting (0 = analyze all)
+                const userMaxPositions = parseInt(document.getElementById('maxPositions').value) || 0;
+                const maxPoints = userMaxPositions > 0 ? Math.min(points.length, userMaxPositions) : points.length;
+
+                console.log(`User max positions: ${userMaxPositions}, analyzing ${maxPoints} of ${points.length} total positions`);
 
                 for (let i = 0; i < maxPoints; i++) {
                     const point = points[i];
 
                     document.getElementById('analysisProgress').textContent =
-                        `Analyzing position ${i + 1} of ${maxPoints}...`;
+                        `Analyzing position ${i + 1} of ${maxPoints} (${points.length} total available)...`;
 
                     try {
                         const pixelPoint = map.latLngToContainerPoint(point.center);
