@@ -363,16 +363,6 @@
         </div>
 
         <div class="control-group">
-            <label>Analysis Period Start:</label>
-            <input type="datetime-local" id="startDate">
-        </div>
-        
-        <div class="control-group">
-            <label>Analysis Period End:</label>
-            <input type="datetime-local" id="endDate">
-        </div>
-
-        <div class="control-group">
             <label>Grid Resolution (ft):</label>
             <input type="number" id="gridResolution" value="5" min="2" max="20">
             <div class="info">Smaller = more accurate but slower</div>
@@ -728,17 +718,11 @@
             map.addLayer(drawnItems);
 
             const now = new Date();
-            document.getElementById('shadowDate').value = now.toISOString().slice(0, 16);
             document.getElementById('sunExposureStartDate').value = now.toISOString().slice(0, 16);
             
             const sunExpEnd = new Date(now);
             sunExpEnd.setMonth(sunExpEnd.getMonth() + 1);
             document.getElementById('sunExposureEndDate').value = sunExpEnd.toISOString().slice(0, 16);
-            
-            document.getElementById('startDate').value = now.toISOString().slice(0, 16);
-            const analysisEnd = new Date(now);
-            analysisEnd.setDate(analysisEnd.getDate() + 7);
-            document.getElementById('endDate').value = analysisEnd.toISOString().slice(0, 16);
 
             console.log('Map initialized');
             console.log('L.shadeMap available:', typeof L.shadeMap !== 'undefined');
@@ -899,8 +883,9 @@
         }
 
         async function calculateRealSunExposure(points, apiKey) {
-            const startDate = new Date(document.getElementById('startDate').value);
-            const endDate = new Date(document.getElementById('endDate').value);
+            // Use the same date inputs as the visualization overlay
+            const startDate = new Date(document.getElementById('sunExposureStartDate').value);
+            const endDate = new Date(document.getElementById('sunExposureEndDate').value);
 
             console.log(`Calculating sun exposure for ${points.length} points from ${startDate} to ${endDate}`);
 
