@@ -1131,9 +1131,15 @@
 
             if (shadeMapLayer) {
                 try {
-                    map.removeLayer(shadeMapLayer);
+                    if (typeof shadeMapLayer.remove === 'function') {
+                        shadeMapLayer.remove();
+                    } else {
+                        map.removeLayer(shadeMapLayer);
+                    }
+                    shadeMapLayer = null;
                 } catch (e) {
                     console.log('Error removing previous shade map:', e);
+                    shadeMapLayer = null;
                 }
             }
 
@@ -1208,12 +1214,22 @@
         document.getElementById('removeShadeBtn').addEventListener('click', function() {
             if (shadeMapLayer) {
                 try {
-                    map.removeLayer(shadeMapLayer);
+                    // Try the ShadeMap's own remove method first
+                    if (typeof shadeMapLayer.remove === 'function') {
+                        shadeMapLayer.remove();
+                    } else {
+                        // Fall back to Leaflet's removeLayer
+                        map.removeLayer(shadeMapLayer);
+                    }
                     shadeMapLayer = null;
                     showMessage('Overlay removed', 'success');
                     this.style.display = 'none';
                 } catch (e) {
                     console.error('Error removing shade map:', e);
+                    // Force cleanup even if removal failed
+                    shadeMapLayer = null;
+                    this.style.display = 'none';
+                    showMessage('Overlay removed (with warnings)', 'success');
                 }
             }
         });
