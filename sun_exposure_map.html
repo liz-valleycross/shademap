@@ -878,6 +878,11 @@
             if (results.length === 0) {
                 showMessage('Analysis failed. Check API key and console for errors.', 'error');
             } else {
+                if (results.length < 10) {
+                    showMessage(`Found ${results.length} non-overlapping spots (parking lot may be too small for 10)`, 'success');
+                } else {
+                    showMessage(`Found top ${results.length} non-overlapping spots!`, 'success');
+                }
                 displayResults(results);
             }
         }
@@ -941,7 +946,8 @@
 
                 const results = [];
                 // Analyze more points to ensure we can find 10 non-overlapping spots
-                const maxPoints = Math.min(points.length, 200);
+                // With 12 orientations per position, we need many grid points
+                const maxPoints = Math.min(points.length, 500);
 
                 for (let i = 0; i < maxPoints; i++) {
                     const point = points[i];
