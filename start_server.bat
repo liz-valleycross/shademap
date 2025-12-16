@@ -60,22 +60,55 @@ if %ERRORLEVEL% EQU 0 (
     echo ===================================
     
 ) else (
-    echo ERROR: No server found!
+    REM Try PowerShell as fallback (built into Windows)
+    echo Python not found, trying PowerShell...
     echo.
-    echo Please download one of these:
+
+    REM Create a temporary PowerShell script for the HTTP server
+    echo $http = [System.Net.HttpListener]::new() > "%TEMP%\simple_server.ps1"
+    echo $http.Prefixes.Add('http://localhost:8000/') >> "%TEMP%\simple_server.ps1"
+    echo $http.Start() >> "%TEMP%\simple_server.ps1"
+    echo Write-Host 'Server running at http://localhost:8000/' >> "%TEMP%\simple_server.ps1"
+    echo Write-Host 'Press Ctrl+C to stop' >> "%TEMP%\simple_server.ps1"
+    echo Write-Host '' >> "%TEMP%\simple_server.ps1"
+    echo $root = $PWD.Path >> "%TEMP%\simple_server.ps1"
+    echo while ($http.IsListening) { >> "%TEMP%\simple_server.ps1"
+    echo     $context = $http.GetContext() >> "%TEMP%\simple_server.ps1"
+    echo     $request = $context.Request >> "%TEMP%\simple_server.ps1"
+    echo     $response = $context.Response >> "%TEMP%\simple_server.ps1"
+    echo     $url = $request.Url.LocalPath >> "%TEMP%\simple_server.ps1"
+    echo     if ($url -eq '/') { $url = '/sun_exposure_map.html' } >> "%TEMP%\simple_server.ps1"
+    echo     $file = Join-Path $root $url.TrimStart('/') >> "%TEMP%\simple_server.ps1"
+    echo     Write-Host "Request: $url" >> "%TEMP%\simple_server.ps1"
+    echo     if (Test-Path $file -PathType Leaf) { >> "%TEMP%\simple_server.ps1"
+    echo         $ext = [System.IO.Path]::GetExtension($file).ToLower() >> "%TEMP%\simple_server.ps1"
+    echo         $mime = @{'.html'='text/html';'.css'='text/css';'.js'='application/javascript';'.csv'='text/csv';'.json'='application/json';'.png'='image/png';'.jpg'='image/jpeg';'.gif'='image/gif'}[$ext] >> "%TEMP%\simple_server.ps1"
+    echo         if (-not $mime) { $mime = 'application/octet-stream' } >> "%TEMP%\simple_server.ps1"
+    echo         $response.ContentType = $mime >> "%TEMP%\simple_server.ps1"
+    echo         $content = [System.IO.File]::ReadAllBytes($file) >> "%TEMP%\simple_server.ps1"
+    echo         $response.ContentLength64 = $content.Length >> "%TEMP%\simple_server.ps1"
+    echo         $response.OutputStream.Write($content, 0, $content.Length) >> "%TEMP%\simple_server.ps1"
+    echo     } else { >> "%TEMP%\simple_server.ps1"
+    echo         $response.StatusCode = 404 >> "%TEMP%\simple_server.ps1"
+    echo         $msg = [System.Text.Encoding]::UTF8.GetBytes('404 Not Found') >> "%TEMP%\simple_server.ps1"
+    echo         $response.OutputStream.Write($msg, 0, $msg.Length) >> "%TEMP%\simple_server.ps1"
+    echo     } >> "%TEMP%\simple_server.ps1"
+    echo     $response.Close() >> "%TEMP%\simple_server.ps1"
+    echo } >> "%TEMP%\simple_server.ps1"
+
+    echo Starting PowerShell HTTP server...
+    start "Solar Analyzer Server" powershell -ExecutionPolicy Bypass -File "%TEMP%\simple_server.ps1"
+
+    timeout /t 3 /nobreak >nul
+
+    echo Opening browser...
+    start http://localhost:8000/sun_exposure_map.html
+
     echo.
-    echo 1. Caddy - EASIEST - 15MB
-    echo    https://caddyserver.com/download
-    echo    Save as caddy.exe in this folder
-    echo.
-    echo 2. Python - one-time install
-    echo    https://www.python.org/downloads/
-    echo    Check Add Python to PATH when installing
-    echo.
-    echo See SETUP_INSTRUCTIONS.txt for details
-    echo.
-    pause
-    exit /b 1
+    echo ===================================
+    echo Server is running on port 8000
+    echo Close the PowerShell window to stop
+    echo ===================================
 )
 
 pause
