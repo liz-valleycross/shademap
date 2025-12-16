@@ -444,16 +444,20 @@
 
         async function loadAddressDatabase() {
             try {
-                const fileContent = await window.fs.readFile('Address Point.csv', { encoding: 'utf8' });
-                
+                const response = await fetch('Orlando_Address_Point.csv');
+                if (!response.ok) {
+                    throw new Error(`Failed to load CSV: ${response.status} ${response.statusText}`);
+                }
+                const fileContent = await response.text();
+
                 const Papa = await import('https://cdn.jsdelivr.net/npm/papaparse@5.4.1/+esm');
-                
+
                 const parsed = Papa.default.parse(fileContent, {
                     header: true,
                     skipEmptyLines: true,
                     dynamicTyping: true
                 });
-                
+
                 console.log(`Parsing CSV with ${parsed.data.length} rows...`);
                 
                 for (let row of parsed.data) {
