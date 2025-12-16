@@ -779,20 +779,15 @@
         async function calculateRealSunExposure(points, apiKey) {
             const startDate = new Date(document.getElementById('startDate').value);
             const endDate = new Date(document.getElementById('endDate').value);
-            
-            console.log(`Calculating REAL sun exposure for ${points.length} points from ${startDate} to ${endDate}`);
-            
+
+            console.log(`Calculating sun exposure for ${points.length} points from ${startDate} to ${endDate}`);
+
+            // Create shadeMap without sunExposure first, then enable it via method
             const shadeMapConfig = {
                 apiKey: apiKey,
                 date: startDate,
                 color: '#000000',
-                opacity: 0,
-                sunExposure: {
-                    enabled: true,
-                    startDate: startDate,
-                    endDate: endDate,
-                    iterations: 32
-                },
+                opacity: 0.7,
                 terrainSource: {
                     tileSize: 256,
                     maxZoom: 15,
@@ -804,36 +799,53 @@
                     }
                 }
             };
-            
+
             try {
                 const analysisShadeMap = L.shadeMap(shadeMapConfig).addTo(map);
 
                 document.getElementById('analysisProgress').textContent =
-                    'Waiting for shadow data to load...';
+                    'Loading terrain data...';
 
-                // Wait for the 'idle' event which fires when the shadow layer has finished rendering
+                // Wait for initial render
                 await new Promise(resolve => analysisShadeMap.on('idle', resolve));
-                
+
+                document.getElementById('analysisProgress').textContent =
+                    'Enabling sun exposure analysis...';
+
+                // Enable sun exposure mode using the API method
+                analysisShadeMap.setSunExposure(true, {
+                    startDate: startDate,
+                    endDate: endDate,
+                    iterations: 32
+                });
+
+                // Wait for sun exposure calculation to complete
+                await new Promise(resolve => analysisShadeMap.on('idle', resolve));
+
+                console.log('Sun exposure mode enabled, starting analysis...');
+
                 const results = [];
                 const maxPoints = Math.min(points.length, 50);
-                
+
                 for (let i = 0; i < maxPoints; i++) {
                     const point = points[i];
-                    
-                    document.getElementById('analysisProgress').textContent = 
+
+                    document.getElementById('analysisProgress').textContent =
                         `Analyzing position ${i + 1} of ${maxPoints}...`;
-                    
+
                     try {
                         const pixelPoint = map.latLngToContainerPoint(point.center);
                         const hoursOfSun = analysisShadeMap.getHoursOfSun(pixelPoint.x, pixelPoint.y);
-                        
-                        if (hoursOfSun !== null && hoursOfSun !== undefined) {
+
+                        console.log(`Point ${i}: pixel(${pixelPoint.x}, ${pixelPoint.y}) -> hoursOfSun: ${hoursOfSun}`);
+
+                        if (hoursOfSun !== null && hoursOfSun !== undefined && !isNaN(hoursOfSun)) {
                             const totalPossibleHours = (endDate - startDate) / (1000 * 60 * 60);
                             const daylightHours = totalPossibleHours * 0.5;
                             const sunExposure = (hoursOfSun / daylightHours) * 100;
-                            
+
                             const avgHoursPerDay = hoursOfSun / ((endDate - startDate) / (1000 * 60 * 60 * 24));
-                            
+
                             results.push({
                                 rank: 0,
                                 lat: point.lat,
@@ -844,15 +856,18 @@
                                 hoursOfSun: avgHoursPerDay,
                                 totalHours: hoursOfSun
                             });
+                        } else {
+                            console.warn(`Point ${i}: getHoursOfSun returned invalid value: ${hoursOfSun}`);
                         }
                     } catch (error) {
                         console.error(`Error analyzing point ${i}:`, error);
                     }
-                    
+
                     await new Promise(resolve => setTimeout(resolve, 100));
                 }
-                
-                analysisShadeMap.remove();
+
+                console.log(`Analysis complete. ${results.length} valid results out of ${maxPoints} points.`);
+                map.removeLayer(analysisShadeMap);
                 
                 results.sort((a, b) => b.sunExposure - a.sunExposure);
                 results.forEach((result, index) => {
@@ -1020,7 +1035,7 @@
 
             if (shadeMapLayer) {
                 try {
-                    shadeMapLayer.remove();
+                    map.removeLayer(shadeMapLayer);
                 } catch (e) {
                     console.log('Error removing previous shade map:', e);
                 }
@@ -1048,13 +1063,9 @@
             if (currentShadeMode === 'shadow') {
                 const dateInput = document.getElementById('shadowDate').value;
                 baseConfig.date = dateInput ? new Date(dateInput) : new Date();
-                baseConfig.sunExposure = {
-                    enabled: false
-                };
             } else {
                 const startDate = new Date(document.getElementById('sunExposureStartDate').value);
                 const endDate = new Date(document.getElementById('sunExposureEndDate').value);
-                const iterations = parseInt(document.getElementById('sunExposureIterations').value);
 
                 if (startDate >= endDate) {
                     showMessage('Start date must be before end date', 'error');
@@ -1062,17 +1073,27 @@
                 }
 
                 baseConfig.date = startDate;
-                baseConfig.sunExposure = {
-                    enabled: true,
-                    startDate: startDate,
-                    endDate: endDate,
-                    iterations: iterations
-                };
             }
 
             try {
                 console.log('Creating shade map with config:', baseConfig);
                 shadeMapLayer = L.shadeMap(baseConfig).addTo(map);
+
+                // If sun exposure mode, enable it via the API method after layer is created
+                if (currentShadeMode === 'sunExposure') {
+                    const startDate = new Date(document.getElementById('sunExposureStartDate').value);
+                    const endDate = new Date(document.getElementById('sunExposureEndDate').value);
+                    const iterations = parseInt(document.getElementById('sunExposureIterations').value);
+
+                    console.log('Enabling sun exposure mode via setSunExposure()...');
+                    shadeMapLayer.setSunExposure(true, {
+                        startDate: startDate,
+                        endDate: endDate,
+                        iterations: iterations
+                    });
+                    console.log('Sun exposure mode enabled');
+                }
+
                 showMessage(currentShadeMode === 'shadow' ? 'Shadow overlay applied!' : 'Sun exposure overlay applied!', 'success');
                 document.getElementById('removeShadeBtn').style.display = 'block';
                 console.log('Shade map created successfully');
@@ -1085,7 +1106,7 @@
         document.getElementById('removeShadeBtn').addEventListener('click', function() {
             if (shadeMapLayer) {
                 try {
-                    shadeMapLayer.remove();
+                    map.removeLayer(shadeMapLayer);
                     shadeMapLayer = null;
                     showMessage('Overlay removed', 'success');
                     this.style.display = 'none';
