@@ -315,27 +315,15 @@
 
         <div class="section-divider"></div>
 
-        <h4 style="margin: 10px 0;">Shadow/Sun Visualization</h4>
-        
-        <div class="mode-toggle">
-            <div class="mode-btn active" id="shadowMode">Shadow Mode</div>
-            <div class="mode-btn" id="sunExposureMode">Sun Exposure</div>
-        </div>
+        <h4 style="margin: 10px 0;">Sun Exposure Visualization</h4>
 
         <div class="control-group">
             <label>API Key:</label>
             <input type="text" id="apiKey" placeholder="Get from shademap.app/about/">
-            <div class="info">Required for shadow/sun analysis</div>
+            <div class="info">Required for sun exposure analysis</div>
         </div>
 
-        <div id="shadowControls">
-            <div class="control-group">
-                <label>Date & Time:</label>
-                <input type="datetime-local" id="shadowDate">
-            </div>
-        </div>
-
-        <div id="sunExposureControls" style="display: none;">
+        <div id="sunExposureControls">
             <div class="control-group">
                 <label>Start Date & Time:</label>
                 <input type="datetime-local" id="sunExposureStartDate">
@@ -351,18 +339,7 @@
             </div>
         </div>
 
-        <div class="control-group">
-            <label>Shade Color:</label>
-            <input type="color" id="shadeColor" value="#01112f">
-        </div>
-
-        <div class="control-group">
-            <label>Opacity:</label>
-            <input type="range" id="shadeOpacity" min="0" max="100" value="70">
-            <div class="info">Current: <span id="shadeOpacityValue">0.7</span></div>
-        </div>
-
-        <button id="applyShadeBtn" class="success">Apply Shadow/Sun Overlay</button>
+        <button id="applyShadeBtn" class="success">Apply Sun Exposure Overlay</button>
         <button id="removeShadeBtn" class="secondary" style="display: none;">Remove Overlay</button>
 
         <div class="section-divider"></div>
@@ -439,7 +416,6 @@
         let resultMarkers = [];
         let searchResultsData = [];
         let shadeMapLayer = null;
-        let currentShadeMode = 'shadow';
         let addressDatabase = [];
         let addressDatabaseLoaded = false;
         let cachedBuildings = null;
@@ -782,6 +758,27 @@
             return meters / 0.3048;
         }
 
+        // Helper function to get color based on sun exposure (red=low, yellow=medium, green=high)
+        function getSunExposureColor(exposurePercent) {
+            // Clamp between 0 and 100
+            const percent = Math.max(0, Math.min(100, exposurePercent));
+
+            let r, g, b;
+            if (percent < 50) {
+                // Red to Yellow (0-50%)
+                r = 255;
+                g = Math.round((percent / 50) * 255);
+                b = 0;
+            } else {
+                // Yellow to Green (50-100%)
+                r = Math.round((1 - (percent - 50) / 50) * 255);
+                g = 255;
+                b = 0;
+            }
+
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+
         // Helper function to get rotated trailer corners
         function getRotatedTrailerCorners(centerLat, centerLng, length, width, angleDegrees, metersPerDegreeLat, metersPerDegreeLng) {
             const angleRad = angleDegrees * Math.PI / 180;
@@ -1045,10 +1042,11 @@
 
                 const rankClass = index < 3 ? 'top' : '';
                 const orientationLabel = result.orientation !== undefined ? `${result.orientation}°` : 'N/A';
+                const exposureColor = getSunExposureColor(result.sunExposure);
 
                 item.innerHTML = `
                     <span class="result-rank ${rankClass}">#${result.rank}</span>
-                    <div class="result-exposure">${result.sunExposure.toFixed(1)}% Sun Exposure</div>
+                    <div class="result-exposure" style="color: ${exposureColor};">${result.sunExposure.toFixed(1)}% Sun Exposure</div>
                     <div>≈ ${result.hoursOfSun.toFixed(1)} hours/day of direct sun</div>
                     <div><strong>Orientation:</strong> ${orientationLabel}</div>
                     <div class="result-coords">
@@ -1064,14 +1062,15 @@
 
                 resultsList.appendChild(item);
 
-                // Use polygon for rotated shapes instead of rectangle
+                // Use polygon for rotated shapes with red-green gradient based on sun exposure
+                const markerColor = getSunExposureColor(result.sunExposure);
                 const marker = L.polygon(
                     result.corners.map(c => [c.lat, c.lng]),
                     {
-                        color: index === 0 ? '#ff0000' : '#ff6600',
+                        color: index === 0 ? '#000000' : markerColor,  // Black border for #1, gradient for others
                         weight: index === 0 ? 3 : 2,
-                        fillOpacity: 0.3,
-                        fillColor: index === 0 ? '#ff0000' : '#ff6600'
+                        fillOpacity: 0.5,
+                        fillColor: markerColor
                     }
                 ).addTo(map);
 
@@ -1137,27 +1136,6 @@
             }
         });
 
-        document.getElementById('shadowMode').addEventListener('click', function() {
-            currentShadeMode = 'shadow';
-            this.classList.add('active');
-            document.getElementById('sunExposureMode').classList.remove('active');
-            document.getElementById('shadowControls').style.display = 'block';
-            document.getElementById('sunExposureControls').style.display = 'none';
-        });
-
-        document.getElementById('sunExposureMode').addEventListener('click', function() {
-            currentShadeMode = 'sunExposure';
-            this.classList.add('active');
-            document.getElementById('shadowMode').classList.remove('active');
-            document.getElementById('shadowControls').style.display = 'none';
-            document.getElementById('sunExposureControls').style.display = 'block';
-        });
-
-        document.getElementById('shadeOpacity').addEventListener('input', function(e) {
-            const value = e.target.value / 100;
-            document.getElementById('shadeOpacityValue').textContent = value.toFixed(2);
-        });
-
         document.getElementById('applyShadeBtn').addEventListener('click', async function() {
             const apiKey = document.getElementById('apiKey').value.trim();
 
@@ -1190,13 +1168,19 @@
             const buildingFeatures = await fetchBuildingsFromOSM();
             console.log(`Loaded ${buildingFeatures.length} buildings for visualization`);
 
-            const color = document.getElementById('shadeColor').value;
-            const opacity = document.getElementById('shadeOpacity').value / 100;
+            const startDate = new Date(document.getElementById('sunExposureStartDate').value);
+            const endDate = new Date(document.getElementById('sunExposureEndDate').value);
+
+            if (startDate >= endDate) {
+                showMessage('Start date must be before end date', 'error');
+                return;
+            }
 
             const baseConfig = {
                 apiKey: apiKey,
-                color: color,
-                opacity: opacity,
+                color: '#01112f',
+                opacity: 0.7,
+                date: startDate,
                 getFeatures: () => buildingFeatures,
                 terrainSource: {
                     tileSize: 256,
@@ -1210,41 +1194,22 @@
                 }
             };
 
-            if (currentShadeMode === 'shadow') {
-                const dateInput = document.getElementById('shadowDate').value;
-                baseConfig.date = dateInput ? new Date(dateInput) : new Date();
-            } else {
-                const startDate = new Date(document.getElementById('sunExposureStartDate').value);
-                const endDate = new Date(document.getElementById('sunExposureEndDate').value);
-
-                if (startDate >= endDate) {
-                    showMessage('Start date must be before end date', 'error');
-                    return;
-                }
-
-                baseConfig.date = startDate;
-            }
-
             try {
                 console.log('Creating shade map with config:', baseConfig);
                 shadeMapLayer = L.shadeMap(baseConfig).addTo(map);
 
-                // If sun exposure mode, enable it via the API method after layer is created
-                if (currentShadeMode === 'sunExposure') {
-                    const startDate = new Date(document.getElementById('sunExposureStartDate').value);
-                    const endDate = new Date(document.getElementById('sunExposureEndDate').value);
-                    const iterations = parseInt(document.getElementById('sunExposureIterations').value);
+                // Enable sun exposure mode via the API method
+                const iterations = parseInt(document.getElementById('sunExposureIterations').value);
 
-                    console.log('Enabling sun exposure mode via setSunExposure()...');
-                    shadeMapLayer.setSunExposure(true, {
-                        startDate: startDate,
-                        endDate: endDate,
-                        iterations: iterations
-                    });
-                    console.log('Sun exposure mode enabled');
-                }
+                console.log('Enabling sun exposure mode via setSunExposure()...');
+                shadeMapLayer.setSunExposure(true, {
+                    startDate: startDate,
+                    endDate: endDate,
+                    iterations: iterations
+                });
+                console.log('Sun exposure mode enabled');
 
-                showMessage(currentShadeMode === 'shadow' ? 'Shadow overlay applied!' : 'Sun exposure overlay applied!', 'success');
+                showMessage('Sun exposure overlay applied!', 'success');
                 document.getElementById('removeShadeBtn').style.display = 'block';
                 console.log('Shade map created successfully');
             } catch (error) {
