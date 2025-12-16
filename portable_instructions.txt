@@ -1,0 +1,212 @@
+SOLAR TRAILER ANALYZER - SETUP GUIDE
+=====================================
+
+This tool MUST run on localhost (local web server).
+
+EASIEST OPTION - PORTABLE SERVER (No Install Required!)
+========================================================
+
+Download one of these portable servers (pick ONE):
+
+OPTION 1: Caddy (RECOMMENDED - Easiest)
+----------------------------------------
+✓ Single executable, no installation
+✓ Works immediately
+
+1. Download: https://caddyserver.com/download
+   - Select: Platform = Windows, Package = GitHub
+   - Click "Download"
+   - You'll get "caddy_windows_amd64.exe" (~15MB)
+
+2. Place "caddy.exe" in the same folder as sun_exposure_map.html
+
+3. Double-click "start_server.bat"
+   - It will automatically detect and use Caddy
+
+4. Browser opens to http://localhost:8000
+
+
+OPTION 2: HTTP File Server (HFS)
+---------------------------------
+✓ Single .exe file
+✓ Simple drag-and-drop interface
+
+1. Download: https://www.rejetto.com/hfs/
+   - Click "Download HFS" (get hfs.exe)
+   - File is about 2MB
+
+2. Run hfs.exe
+
+3. Drag sun_exposure_map.html into the HFS window
+
+4. Right-click the file → "Open in browser"
+
+
+OPTION 3: Python (If Already Installed)
+----------------------------------------
+If you already have Python:
+
+1. Double-click "start_server.bat"
+2. Browser opens automatically!
+
+
+DETAILED CADDY SETUP (RECOMMENDED):
+====================================
+
+Step-by-step:
+1. Go to https://caddyserver.com/download
+2. Platform: Windows
+3. Click "Download" button
+4. Save the file
+5. Rename downloaded file to: caddy.exe
+6. Move caddy.exe to same folder as sun_exposure_map.html
+7. Double-click start_server.bat
+8. Done!
+
+The start_server.bat file will automatically:
+- Check for caddy.exe first
+- Then check for Python
+- Start whichever it finds
+- Open your browser
+
+
+WHAT TO PACKAGE FOR DISTRIBUTION:
+==================================
+
+Essential Files:
+✓ sun_exposure_map.html (the main app)
+✓ caddy.exe (download from link above - ~15MB)
+✓ start_server.bat (the launcher)
+✓ This SETUP_INSTRUCTIONS.txt
+
+Package as ZIP:
+```
+📁 Solar_Trailer_Analyzer.zip
+  ├── sun_exposure_map.html
+  ├── caddy.exe
+  ├── start_server.bat
+  └── SETUP_INSTRUCTIONS.txt
+```
+
+User just extracts and double-clicks start_server.bat!
+
+
+FOR USERS WITHOUT TECHNICAL KNOWLEDGE:
+=======================================
+
+Tell them:
+1. Extract the ZIP file
+2. Double-click "start_server.bat"
+3. A browser window will open automatically
+4. That's it!
+
+When done:
+- Close the command window that appeared
+
+
+HOW TO USE THE APP:
+===================
+1. Start the server (double-click start_server.bat)
+2. Browser opens automatically
+3. Search for your address
+4. Switch to "Satellite" view (easier to see parking lots)
+5. Enter trailer dimensions:
+   - Width (feet)
+   - Length (feet)
+6. Click "Draw Parking Lot Area"
+   - Click corners of the parking lot
+   - Double-click to finish
+7. Enter your Shadow Map API key
+   - Get free key from: https://shademap.app/about/
+8. Set analysis dates (start and end)
+9. Click "Analyze Parking Spots"
+10. View results ranked by sun exposure!
+
+Results show:
+- Ranking (#1 = best spot)
+- Sun exposure percentage
+- Estimated hours per day of direct sun
+- Exact coordinates
+- Red boxes on map showing trailer placement
+
+
+ALTERNATIVE IF NOTHING ELSE WORKS:
+===================================
+
+Simple Python Installation (One-time, 5 minutes):
+1. Go to: https://www.python.org/downloads/
+2. Download and run installer
+3. ✓ CHECK: "Add Python to PATH" (important!)
+4. Click "Install Now"
+5. Close installer when done
+6. Double-click start_server.bat
+7. Never need to install again!
+
+
+TROUBLESHOOTING:
+================
+
+"Server not found" error:
+→ Download caddy.exe or install Python
+
+Port 8000 already in use:
+→ Close other programs using port 8000
+→ Or modify start_server.bat to use port 8080
+
+Can't find address:
+→ Use full address including zip code
+→ Example: "123 Main St, Orlando, FL 32801"
+
+Map not loading:
+→ Check internet connection
+→ Libraries load from CDN, need internet
+
+Analysis not working:
+→ Verify Shadow Map API key is correct
+→ Make sure parking lot is drawn
+→ Check that dates are valid
+
+Libraries not loading:
+→ Check internet connection
+→ Try different browser (Chrome recommended)
+
+
+FILE SIZES FOR DISTRIBUTION:
+=============================
+- sun_exposure_map.html: ~50KB
+- caddy.exe: ~15MB
+- start_server.bat: 2KB
+- instructions.txt: 5KB
+
+Total ZIP size: ~15MB
+
+
+WHY LOCALHOST IS REQUIRED:
+==========================
+The app uses:
+- External JavaScript libraries (Leaflet, etc.)
+- Advanced browser APIs
+- Cross-origin requests
+
+These require proper HTTP server (localhost) and won't work
+when opened directly as file:// in browser.
+
+
+DOWNLOAD LINKS SUMMARY:
+=======================
+Caddy (Windows): https://caddyserver.com/download
+HFS: https://www.rejetto.com/hfs/
+Python: https://www.python.org/downloads/
+Shadow Map API Key: https://shademap.app/about/
+
+
+QUICK START CHECKLIST:
+======================
+□ Download caddy.exe from caddyserver.com
+□ Place in folder with HTML file
+□ Double-click start_server.bat
+□ Get Shadow Map API key
+□ Start analyzing!
+
+
+For questions or support, contact: [your contact info]

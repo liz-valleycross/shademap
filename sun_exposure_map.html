@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Trailer Placement Analyzer</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        #map {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 100%;
+        }
+        .controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            max-width: 320px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        input[type="text"],
+        input[type="datetime-local"],
+        input[type="number"],
+        input[type="color"],
+        select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        button.secondary {
+            background: #6c757d;
+        }
+        button.secondary:hover {
+            background: #5a6268;
+        }
+        button.success {
+            background: #28a745;
+        }
+        button.success:hover {
+            background: #218838;
+        }
+        .info {
+            font-size: 12px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .mode-toggle {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .mode-btn {
+            flex: 1;
+            padding: 8px;
+            background: #f0f0f0;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            font-size: 12px;
+        }
+        .mode-btn.active {
+            background: #007bff;
+            color: white;
+            border-color: #007bff;
+        }
+        .map-toggle {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .map-btn {
+            flex: 1;
+            padding: 8px;
+            background: #f0f0f0;
+            border: 2px solid #ccc;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            font-size: 12px;
+        }
+        .map-btn.active {
+            background: #28a745;
+            color: white;
+            border-color: #28a745;
+        }
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-size: 12px;
+        }
+        .search-results {
+            margin-top: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none;
+        }
+        .search-result-item {
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .search-result-item:hover {
+            background: #f0f0f0;
+        }
+        .search-result-item:last-child {
+            border-bottom: none;
+        }
+        .address-main {
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+        .address-details {
+            color: #666;
+            font-size: 11px;
+        }
+        .results-panel {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+            max-width: 400px;
+            max-height: 90vh;
+            overflow-y: auto;
+            display: none;
+        }
+        .results-panel.show {
+            display: block;
+        }
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .results-header h3 {
+            margin: 0;
+        }
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #666;
+            padding: 0;
+            width: auto;
+        }
+        .close-btn:hover {
+            color: #000;
+        }
+        .result-item {
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .result-item:hover {
+            border-color: #007bff;
+            background: #f8f9fa;
+        }
+        .result-item.selected {
+            border-color: #007bff;
+            background: #e7f3ff;
+        }
+        .result-rank {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+        .result-rank.top {
+            background: #28a745;
+        }
+        .result-exposure {
+            font-size: 18px;
+            font-weight: bold;
+            color: #28a745;
+            margin: 8px 0;
+        }
+        .result-coords {
+            font-size: 11px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .analyzing-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+            z-index: 2000;
+            text-align: center;
+            display: none;
+        }
+        .analyzing-overlay.show {
+            display: block;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #007bff;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .section-divider {
+            border-top: 2px solid #e0e0e0;
+            margin: 20px 0;
+        }
+        .size-inputs {
+            display: flex;
+            gap: 10px;
+        }
+        .size-inputs .control-group {
+            flex: 1;
+            margin-bottom: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="controls">
+        <h3 style="margin-top: 0;">Solar Trailer Analyzer</h3>
+        
+        <div id="messageBox"></div>
+
+        <div class="control-group">
+            <label>Search Address:</label>
+            <input type="text" id="addressSearch" placeholder="Enter full address">
+            <button id="searchBtn" style="margin-top: 5px;">Search Location</button>
+            <div class="search-results" id="searchResults"></div>
+            <div class="info" id="searchStatus"></div>
+        </div>
+
+        <div class="map-toggle">
+            <div class="map-btn active" id="streetMapBtn">Street Map</div>
+            <div class="map-btn" id="satelliteMapBtn">Satellite</div>
+        </div>
+
+        <div class="section-divider"></div>
+
+        <h4 style="margin: 10px 0;">Shadow/Sun Visualization</h4>
+        
+        <div class="mode-toggle">
+            <div class="mode-btn active" id="shadowMode">Shadow Mode</div>
+            <div class="mode-btn" id="sunExposureMode">Sun Exposure</div>
+        </div>
+
+        <div class="control-group">
+            <label>API Key:</label>
+            <input type="text" id="apiKey" placeholder="Get from shademap.app/about/">
+            <div class="info">Required for shadow/sun analysis</div>
+        </div>
+
+        <div id="shadowControls">
+            <div class="control-group">
+                <label>Date & Time:</label>
+                <input type="datetime-local" id="shadowDate">
+            </div>
+        </div>
+
+        <div id="sunExposureControls" style="display: none;">
+            <div class="control-group">
+                <label>Start Date & Time:</label>
+                <input type="datetime-local" id="sunExposureStartDate">
+            </div>
+            <div class="control-group">
+                <label>End Date & Time:</label>
+                <input type="datetime-local" id="sunExposureEndDate">
+            </div>
+            <div class="control-group">
+                <label>Detail Level (iterations):</label>
+                <input type="number" id="sunExposureIterations" value="32" min="8" max="128">
+                <div class="info">Higher = more accurate but slower</div>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <label>Shade Color:</label>
+            <input type="color" id="shadeColor" value="#01112f">
+        </div>
+
+        <div class="control-group">
+            <label>Opacity:</label>
+            <input type="range" id="shadeOpacity" min="0" max="100" value="70">
+            <div class="info">Current: <span id="shadeOpacityValue">0.7</span></div>
+        </div>
+
+        <button id="applyShadeBtn" class="success">Apply Shadow/Sun Overlay</button>
+        <button id="removeShadeBtn" class="secondary" style="display: none;">Remove Overlay</button>
+
+        <div class="section-divider"></div>
+
+        <h4 style="margin: 10px 0;">Trailer Placement Analysis</h4>
+        
+        <div class="size-inputs">
+            <div class="control-group">
+                <label>Width (ft):</label>
+                <input type="number" id="trailerWidth" value="8" min="1" max="50" step="0.5">
+            </div>
+            <div class="control-group">
+                <label>Length (ft):</label>
+                <input type="number" id="trailerLength" value="20" min="1" max="100" step="0.5">
+            </div>
+        </div>
+
+        <div class="control-group">
+            <button id="drawParkingLotBtn" class="success">📍 Draw Parking Lot Area</button>
+            <div class="info">Click corners, double-click to finish</div>
+        </div>
+
+        <div class="control-group">
+            <label>Analysis Period Start:</label>
+            <input type="datetime-local" id="startDate">
+        </div>
+        
+        <div class="control-group">
+            <label>Analysis Period End:</label>
+            <input type="datetime-local" id="endDate">
+        </div>
+
+        <div class="control-group">
+            <label>Grid Resolution (ft):</label>
+            <input type="number" id="gridResolution" value="5" min="2" max="20">
+            <div class="info">Smaller = more accurate but slower</div>
+        </div>
+
+        <div class="control-group">
+            <button id="analyzeBtn" disabled>🔍 Analyze Parking Spots</button>
+            <div class="info" id="analysisInfo">Draw a parking lot first</div>
+        </div>
+
+        <button id="clearAllBtn" class="secondary">Clear All</button>
+    </div>
+
+    <div class="results-panel" id="resultsPanel">
+        <div class="results-header">
+            <h3>Top Solar Spots</h3>
+            <button class="close-btn" id="closeResultsBtn">×</button>
+        </div>
+        <div id="resultsList"></div>
+    </div>
+
+    <div class="analyzing-overlay" id="analyzingOverlay">
+        <div class="spinner"></div>
+        <h3>Analyzing Sun Exposure...</h3>
+        <p id="analysisProgress">Processing parking lot data</p>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js" crossorigin="anonymous"></script>
+    <script src="https://unpkg.com/leaflet-shadow-simulator/dist/leaflet-shadow-simulator.umd.min.js" crossorigin="anonymous"></script>
+    <script>
+        let map;
+        let currentBaseLayer = 'street';
+        let streetLayer;
+        let satelliteLayer;
+        let drawControl;
+        let drawnItems;
+        let parkingLotPolygon = null;
+        let analysisResults = [];
+        let resultMarkers = [];
+        let searchResultsData = [];
+        let shadeMapLayer = null;
+        let currentShadeMode = 'shadow';
+        let addressDatabase = [];
+        let addressDatabaseLoaded = false;
+
+        async function loadAddressDatabase() {
+            try {
+                const fileContent = await window.fs.readFile('Address Point.csv', { encoding: 'utf8' });
+                
+                const Papa = await import('https://cdn.jsdelivr.net/npm/papaparse@5.4.1/+esm');
+                
+                const parsed = Papa.default.parse(fileContent, {
+                    header: true,
+                    skipEmptyLines: true,
+                    dynamicTyping: true
+                });
+                
+                console.log(`Parsing CSV with ${parsed.data.length} rows...`);
+                
+                for (let row of parsed.data) {
+                    if (row.LATITUDE && row.LONGITUDE) {
+                        addressDatabase.push({
+                            completeAddress: row.COMPLETE_ADDRESS,
+                            addressNumber: row.ADDRESS_NUMBER?.toString(),
+                            basename: row.BASENAME,
+                            postType: row.POST_TYPE,
+                            completeStreetName: row.COMPLETE_STREETNAME,
+                            city: row.MUNICIPAL_JURISDICTION,
+                            zipcode: row.ZIPCODE?.toString(),
+                            latitude: parseFloat(row.LATITUDE),
+                            longitude: parseFloat(row.LONGITUDE),
+                            status: row.ADDRESS_STATUS
+                        });
+                    }
+                }
+                
+                addressDatabaseLoaded = true;
+                console.log(`Loaded ${addressDatabase.length} addresses from Orange County database`);
+                showMessage(`Loaded ${addressDatabase.length.toLocaleString()} Orange County addresses ✓`, 'success');
+            } catch (error) {
+                console.warn('Could not load local address database:', error);
+                console.error('Error details:', error);
+                showMessage('Using online geocoding (local database not found)', 'error');
+            }
+        }
+
+        function searchLocalAddresses(query) {
+            if (!addressDatabaseLoaded || addressDatabase.length === 0) {
+                return [];
+            }
+            
+            const queryUpper = query.toUpperCase().trim();
+            const houseMatch = queryUpper.match(/^(\d+)\s+/);
+            
+            if (!houseMatch) {
+                const results = addressDatabase.filter(addr => 
+                    addr.completeAddress.toUpperCase().includes(queryUpper)
+                ).slice(0, 20);
+                return results;
+            }
+            
+            const houseNum = houseMatch[1];
+            const streetPart = queryUpper.substring(houseNum.length).trim();
+            const streetWords = streetPart.split(/\s+/).filter(w => w.length > 0);
+            
+            const results = addressDatabase.filter(addr => {
+                if (addr.addressNumber !== houseNum) return false;
+                if (addr.status !== 'Active') return false;
+                
+                const addrStreet = (addr.basename + ' ' + addr.postType).toUpperCase();
+                return streetWords.every(word => addrStreet.includes(word));
+            });
+            
+            return results.slice(0, 10);
+        }
+
+        function displayLocalResults(results, searchQuery) {
+            const resultsDiv = document.getElementById('searchResults');
+            resultsDiv.innerHTML = '';
+            
+            if (!results || results.length === 0) {
+                resultsDiv.style.display = 'none';
+                return;
+            }
+            
+            searchResultsData = results.map(addr => ({
+                lat: addr.latitude,
+                lon: addr.longitude,
+                display_name: addr.completeAddress,
+                address: {
+                    house_number: addr.addressNumber,
+                    road: addr.completeStreetName,
+                    city: addr.city,
+                    postcode: addr.zipcode,
+                    state: 'FL'
+                },
+                type: 'address',
+                source: 'orange_county'
+            }));
+            
+            searchResultsData.forEach((result, index) => {
+                const item = document.createElement('div');
+                item.className = 'search-result-item';
+                
+                const addr = result.address;
+                const mainAddress = [addr.house_number, addr.road].filter(Boolean).join(' ');
+                const details = [addr.city, addr.state, addr.zipcode].filter(Boolean).join(', ');
+                
+                item.innerHTML = `
+                    <div class="address-main">${mainAddress}</div>
+                    <div class="address-details">${details} <span style="color: #28a745;">✓ Orange County Official</span></div>
+                `;
+                
+                item.addEventListener('click', () => selectSearchResult(index));
+                resultsDiv.appendChild(item);
+            });
+            
+            resultsDiv.style.display = 'block';
+        }
+
+        function displayGeocodeResults(candidates, searchQuery) {
+            const resultsDiv = document.getElementById('searchResults');
+            resultsDiv.innerHTML = '';
+            
+            if (!candidates || candidates.length === 0) {
+                resultsDiv.style.display = 'none';
+                return;
+            }
+            
+            searchResultsData = candidates.map(candidate => {
+                const attrs = candidate.attributes;
+                const loc = candidate.location;
+                return {
+                    lat: loc.y,
+                    lon: loc.x,
+                    display_name: candidate.address,
+                    address: {
+                        house_number: attrs.AddNum,
+                        road: attrs.StName + (attrs.StType ? ' ' + attrs.StType : ''),
+                        city: attrs.City,
+                        postcode: attrs.Postal,
+                        state: attrs.RegionAbbr
+                    },
+                    score: candidate.score,
+                    type: 'address',
+                    source: 'arcgis'
+                };
+            });
+            
+            searchResultsData.forEach((result, index) => {
+                const item = document.createElement('div');
+                item.className = 'search-result-item';
+                
+                const addr = result.address;
+                const mainAddress = [addr.house_number, addr.road].filter(Boolean).join(' ');
+                const details = [addr.city, addr.state, addr.postcode].filter(Boolean).join(', ');
+                const scoreIndicator = result.score >= 95 ? '✓ High Match' : result.score >= 85 ? '~ Good Match' : '? Check Address';
+                
+                item.innerHTML = `
+                    <div class="address-main">${mainAddress}</div>
+                    <div class="address-details">${details} <span style="color: ${result.score >= 95 ? '#28a745' : result.score >= 85 ? '#ffa500' : '#dc3545'};">${scoreIndicator}</span></div>
+                `;
+                
+                item.addEventListener('click', () => selectSearchResult(index));
+                resultsDiv.appendChild(item);
+            });
+            
+            resultsDiv.style.display = 'block';
+        }
+
+        function selectSearchResult(index) {
+            const result = searchResultsData[index];
+            const lat = parseFloat(result.lat);
+            const lon = parseFloat(result.lon);
+            
+            map.setView([lat, lon], 19);
+            
+            map.eachLayer(function(layer) {
+                if (layer instanceof L.Marker) {
+                    map.removeLayer(layer);
+                }
+            });
+            
+            L.marker([lat, lon]).addTo(map)
+                .bindPopup(result.display_name)
+                .openPopup();
+            
+            document.getElementById('searchResults').style.display = 'none';
+            document.getElementById('searchStatus').textContent = 'Location selected!';
+            document.getElementById('searchStatus').style.color = 'green';
+            setTimeout(() => {
+                document.getElementById('searchStatus').textContent = '';
+            }, 3000);
+        }
+
+        function showMessage(message, type) {
+            const messageBox = document.getElementById('messageBox');
+            messageBox.className = type === 'error' ? 'error-message' : 'success-message';
+            messageBox.textContent = message;
+            messageBox.style.display = 'block';
+            
+            setTimeout(() => {
+                messageBox.style.display = 'none';
+            }, 5000);
+        }
+
+        function initMap() {
+            map = L.map('map').setView([28.5383, -81.3792], 18);
+            
+            streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(map);
+
+            satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles © Esri',
+                maxZoom: 19
+            });
+
+            drawnItems = new L.FeatureGroup();
+            map.addLayer(drawnItems);
+
+            const now = new Date();
+            document.getElementById('shadowDate').value = now.toISOString().slice(0, 16);
+            document.getElementById('sunExposureStartDate').value = now.toISOString().slice(0, 16);
+            
+            const sunExpEnd = new Date(now);
+            sunExpEnd.setMonth(sunExpEnd.getMonth() + 1);
+            document.getElementById('sunExposureEndDate').value = sunExpEnd.toISOString().slice(0, 16);
+            
+            document.getElementById('startDate').value = now.toISOString().slice(0, 16);
+            const analysisEnd = new Date(now);
+            analysisEnd.setDate(analysisEnd.getDate() + 7);
+            document.getElementById('endDate').value = analysisEnd.toISOString().slice(0, 16);
+
+            console.log('Map initialized');
+            console.log('L.shadeMap available:', typeof L.shadeMap !== 'undefined');
+            
+            if (typeof L.shadeMap === 'undefined') {
+                showMessage('Warning: Shadow simulator library may not have loaded.', 'error');
+            }
+            
+            loadAddressDatabase();
+        }
+
+        function feetToMeters(feet) {
+            return feet * 0.3048;
+        }
+
+        function metersToFeet(meters) {
+            return meters / 0.3048;
+        }
+
+        async function analyzeParkingLot() {
+            if (!parkingLotPolygon) {
+                showMessage('Please draw a parking lot area first', 'error');
+                return;
+            }
+
+            const apiKey = document.getElementById('apiKey').value.trim();
+            if (!apiKey) {
+                showMessage('Please enter your API key', 'error');
+                return;
+            }
+
+            if (typeof L.shadeMap === 'undefined') {
+                showMessage('Shadow simulator library not loaded', 'error');
+                return;
+            }
+
+            const overlay = document.getElementById('analyzingOverlay');
+            overlay.classList.add('show');
+            document.getElementById('analysisProgress').textContent = 'Preparing analysis...';
+
+            const trailerWidth = feetToMeters(parseFloat(document.getElementById('trailerWidth').value));
+            const trailerLength = feetToMeters(parseFloat(document.getElementById('trailerLength').value));
+            const gridRes = feetToMeters(parseFloat(document.getElementById('gridResolution').value));
+
+            const bounds = parkingLotPolygon.getBounds();
+            const latLngs = parkingLotPolygon.getLatLngs()[0];
+
+            const testPoints = [];
+            const minLat = bounds.getSouth();
+            const maxLat = bounds.getNorth();
+            const minLng = bounds.getWest();
+            const maxLng = bounds.getEast();
+
+            const lat = (minLat + maxLat) / 2;
+            const metersPerDegreeLat = 111320;
+            const metersPerDegreeLng = 111320 * Math.cos(lat * Math.PI / 180);
+
+            const latStep = gridRes / metersPerDegreeLat;
+            const lngStep = gridRes / metersPerDegreeLng;
+
+            for (let testLat = minLat; testLat <= maxLat; testLat += latStep) {
+                for (let lng = minLng; lng <= maxLng; lng += lngStep) {
+                    const point = L.latLng(testLat, lng);
+                    
+                    const trailerCorners = [
+                        L.latLng(testLat, lng),
+                        L.latLng(testLat + (trailerLength / metersPerDegreeLat), lng),
+                        L.latLng(testLat + (trailerLength / metersPerDegreeLat), lng + (trailerWidth / metersPerDegreeLng)),
+                        L.latLng(testLat, lng + (trailerWidth / metersPerDegreeLng))
+                    ];
+
+                    const allCornersInside = trailerCorners.every(corner => 
+                        isPointInPolygon(corner, latLngs)
+                    );
+
+                    if (allCornersInside) {
+                        testPoints.push({
+                            lat: testLat,
+                            lng: lng,
+                            center: L.latLng(testLat + (trailerLength / metersPerDegreeLat / 2), 
+                                           lng + (trailerWidth / metersPerDegreeLng / 2)),
+                            corners: trailerCorners
+                        });
+                    }
+                }
+            }
+
+            document.getElementById('analysisProgress').textContent = 
+                `Analyzing ${testPoints.length} possible positions using Shadow Map API...`;
+
+            const results = await calculateRealSunExposure(testPoints, apiKey);
+
+            overlay.classList.remove('show');
+            
+            if (results.length === 0) {
+                showMessage('Analysis failed. Check API key and console for errors.', 'error');
+            } else {
+                displayResults(results);
+            }
+        }
+
+        async function calculateRealSunExposure(points, apiKey) {
+            const startDate = new Date(document.getElementById('startDate').value);
+            const endDate = new Date(document.getElementById('endDate').value);
+            
+            console.log(`Calculating REAL sun exposure for ${points.length} points from ${startDate} to ${endDate}`);
+            
+            const shadeMapConfig = {
+                apiKey: apiKey,
+                date: startDate,
+                color: '#000000',
+                opacity: 0,
+                sunExposure: {
+                    enabled: true,
+                    startDate: startDate,
+                    endDate: endDate,
+                    iterations: 32
+                },
+                terrainSource: {
+                    tileSize: 256,
+                    maxZoom: 15,
+                    getSourceUrl: ({x, y, z}) => {
+                        return `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+                    },
+                    getElevation: ({r, g, b, a}) => {
+                        return (r * 256 + g + b / 256) - 32768;
+                    }
+                }
+            };
+            
+            try {
+                const analysisShadeMap = L.shadeMap(shadeMapConfig).addTo(map);
+                
+                document.getElementById('analysisProgress').textContent = 
+                    'Waiting for shadow data to load...';
+                
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                const results = [];
+                const maxPoints = Math.min(points.length, 50);
+                
+                for (let i = 0; i < maxPoints; i++) {
+                    const point = points[i];
+                    
+                    document.getElementById('analysisProgress').textContent = 
+                        `Analyzing position ${i + 1} of ${maxPoints}...`;
+                    
+                    try {
+                        const pixelPoint = map.latLngToContainerPoint(point.center);
+                        const hoursOfSun = analysisShadeMap.getHoursOfSun(pixelPoint.x, pixelPoint.y);
+                        
+                        if (hoursOfSun !== null && hoursOfSun !== undefined) {
+                            const totalPossibleHours = (endDate - startDate) / (1000 * 60 * 60);
+                            const daylightHours = totalPossibleHours * 0.5;
+                            const sunExposure = (hoursOfSun / daylightHours) * 100;
+                            
+                            const avgHoursPerDay = hoursOfSun / ((endDate - startDate) / (1000 * 60 * 60 * 24));
+                            
+                            results.push({
+                                rank: 0,
+                                lat: point.lat,
+                                lng: point.lng,
+                                center: point.center,
+                                corners: point.corners,
+                                sunExposure: Math.min(100, sunExposure),
+                                hoursOfSun: avgHoursPerDay,
+                                totalHours: hoursOfSun
+                            });
+                        }
+                    } catch (error) {
+                        console.error(`Error analyzing point ${i}:`, error);
+                    }
+                    
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                
+                analysisShadeMap.remove();
+                
+                results.sort((a, b) => b.sunExposure - a.sunExposure);
+                results.forEach((result, index) => {
+                    result.rank = index + 1;
+                });
+
+                return results.slice(0, 10);
+                
+            } catch (error) {
+                console.error('Error in sun exposure calculation:', error);
+                showMessage('Error calculating sun exposure. Check API key and console.', 'error');
+                return [];
+            }
+        }
+
+        function isPointInPolygon(point, polygon) {
+            let inside = false;
+            for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+                const xi = polygon[i].lat, yi = polygon[i].lng;
+                const xj = polygon[j].lat, yj = polygon[j].lng;
+                
+                const intersect = ((yi > point.lng) !== (yj > point.lng))
+                    && (point.lat < (xj - xi) * (point.lng - yi) / (yj - yi) + xi);
+                if (intersect) inside = !inside;
+            }
+            return inside;
+        }
+
+        function displayResults(results) {
+            analysisResults = results;
+            const resultsList = document.getElementById('resultsList');
+            resultsList.innerHTML = '';
+
+            resultMarkers.forEach(marker => map.removeLayer(marker));
+            resultMarkers = [];
+
+            results.forEach((result, index) => {
+                const item = document.createElement('div');
+                item.className = 'result-item';
+                if (index === 0) item.classList.add('selected');
+                
+                const rankClass = index < 3 ? 'top' : '';
+                
+                item.innerHTML = `
+                    <span class="result-rank ${rankClass}">#${result.rank}</span>
+                    <div class="result-exposure">${result.sunExposure.toFixed(1)}% Sun Exposure</div>
+                    <div>≈ ${result.hoursOfSun.toFixed(1)} hours/day of direct sun</div>
+                    <div class="result-coords">
+                        ${result.center.lat.toFixed(6)}, ${result.center.lng.toFixed(6)}
+                    </div>
+                `;
+
+                item.addEventListener('click', () => {
+                    document.querySelectorAll('.result-item').forEach(el => el.classList.remove('selected'));
+                    item.classList.add('selected');
+                    highlightSpotOnMap(result);
+                });
+
+                resultsList.appendChild(item);
+
+                const marker = L.rectangle([
+                    [result.corners[0].lat, result.corners[0].lng],
+                    [result.corners[2].lat, result.corners[2].lng]
+                ], {
+                    color: index === 0 ? '#ff0000' : '#ff6600',
+                    weight: index === 0 ? 3 : 2,
+                    fillOpacity: 0.3,
+                    fillColor: index === 0 ? '#ff0000' : '#ff6600'
+                }).addTo(map);
+
+                marker.bindPopup(`
+                    <strong>Spot #${result.rank}</strong><br>
+                    Sun Exposure: ${result.sunExposure.toFixed(1)}%<br>
+                    Hours/day: ${result.hoursOfSun.toFixed(1)}
+                `);
+
+                if (index === 0) {
+                    marker.openPopup();
+                }
+
+                resultMarkers.push(marker);
+            });
+
+            document.getElementById('resultsPanel').classList.add('show');
+            
+            if (results.length > 0) {
+                highlightSpotOnMap(results[0]);
+            }
+        }
+
+        function highlightSpotOnMap(result) {
+            map.setView(result.center, 20);
+            
+            resultMarkers.forEach((marker, index) => {
+                if (analysisResults[index] === result) {
+                    marker.setStyle({
+                        color: '#ff0000',
+                        weight: 3,
+                        fillOpacity: 0.5
+                    });
+                    marker.openPopup();
+                } else {
+                    marker.setStyle({
+                        color: '#ff6600',
+                        weight: 2,
+                        fillOpacity: 0.3
+                    });
+                }
+            });
+        }
+
+        document.getElementById('streetMapBtn').addEventListener('click', function() {
+            if (currentBaseLayer !== 'street') {
+                map.removeLayer(satelliteLayer);
+                map.addLayer(streetLayer);
+                currentBaseLayer = 'street';
+                this.classList.add('active');
+                document.getElementById('satelliteMapBtn').classList.remove('active');
+            }
+        });
+
+        document.getElementById('satelliteMapBtn').addEventListener('click', function() {
+            if (currentBaseLayer !== 'satellite') {
+                map.removeLayer(streetLayer);
+                map.addLayer(satelliteLayer);
+                currentBaseLayer = 'satellite';
+                this.classList.add('active');
+                document.getElementById('streetMapBtn').classList.remove('active');
+            }
+        });
+
+        document.getElementById('shadowMode').addEventListener('click', function() {
+            currentShadeMode = 'shadow';
+            this.classList.add('active');
+            document.getElementById('sunExposureMode').classList.remove('active');
+            document.getElementById('shadowControls').style.display = 'block';
+            document.getElementById('sunExposureControls').style.display = 'none';
+        });
+
+        document.getElementById('sunExposureMode').addEventListener('click', function() {
+            currentShadeMode = 'sunExposure';
+            this.classList.add('active');
+            document.getElementById('shadowMode').classList.remove('active');
+            document.getElementById('shadowControls').style.display = 'none';
+            document.getElementById('sunExposureControls').style.display = 'block';
+        });
+
+        document.getElementById('shadeOpacity').addEventListener('input', function(e) {
+            const value = e.target.value / 100;
+            document.getElementById('shadeOpacityValue').textContent = value.toFixed(2);
+        });
+
+        document.getElementById('applyShadeBtn').addEventListener('click', function() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            
+            if (!apiKey) {
+                showMessage('Please enter your Shadow Map API key', 'error');
+                return;
+            }
+
+            if (typeof L.shadeMap === 'undefined') {
+                showMessage('Shadow simulator library not loaded. Check internet connection.', 'error');
+                return;
+            }
+
+            if (shadeMapLayer) {
+                try {
+                    shadeMapLayer.remove();
+                } catch (e) {
+                    console.log('Error removing previous shade map:', e);
+                }
+            }
+
+            const color = document.getElementById('shadeColor').value;
+            const opacity = document.getElementById('shadeOpacity').value / 100;
+
+            const baseConfig = {
+                apiKey: apiKey,
+                color: color,
+                opacity: opacity,
+                terrainSource: {
+                    tileSize: 256,
+                    maxZoom: 15,
+                    getSourceUrl: ({x, y, z}) => {
+                        return `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`;
+                    },
+                    getElevation: ({r, g, b, a}) => {
+                        return (r * 256 + g + b / 256) - 32768;
+                    }
+                }
+            };
+
+            if (currentShadeMode === 'shadow') {
+                const dateInput = document.getElementById('shadowDate').value;
+                baseConfig.date = dateInput ? new Date(dateInput) : new Date();
+                baseConfig.sunExposure = {
+                    enabled: false
+                };
+            } else {
+                const startDate = new Date(document.getElementById('sunExposureStartDate').value);
+                const endDate = new Date(document.getElementById('sunExposureEndDate').value);
+                const iterations = parseInt(document.getElementById('sunExposureIterations').value);
+
+                if (startDate >= endDate) {
+                    showMessage('Start date must be before end date', 'error');
+                    return;
+                }
+
+                baseConfig.date = startDate;
+                baseConfig.sunExposure = {
+                    enabled: true,
+                    startDate: startDate,
+                    endDate: endDate,
+                    iterations: iterations
+                };
+            }
+
+            try {
+                console.log('Creating shade map with config:', baseConfig);
+                shadeMapLayer = L.shadeMap(baseConfig).addTo(map);
+                showMessage(currentShadeMode === 'shadow' ? 'Shadow overlay applied!' : 'Sun exposure overlay applied!', 'success');
+                document.getElementById('removeShadeBtn').style.display = 'block';
+                console.log('Shade map created successfully');
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+                console.error('Detailed error:', error);
+            }
+        });
+
+        document.getElementById('removeShadeBtn').addEventListener('click', function() {
+            if (shadeMapLayer) {
+                try {
+                    shadeMapLayer.remove();
+                    shadeMapLayer = null;
+                    showMessage('Overlay removed', 'success');
+                    this.style.display = 'none';
+                } catch (e) {
+                    console.error('Error removing shade map:', e);
+                }
+            }
+        });
+
+        document.getElementById('searchBtn').addEventListener('click', async function() {
+            const address = document.getElementById('addressSearch').value.trim();
+            const statusDiv = document.getElementById('searchStatus');
+            
+            if (!address) {
+                statusDiv.textContent = 'Please enter an address';
+                statusDiv.style.color = 'red';
+                return;
+            }
+
+            statusDiv.textContent = 'Searching...';
+            statusDiv.style.color = '#666';
+            document.getElementById('searchResults').style.display = 'none';
+            
+            if (addressDatabaseLoaded) {
+                const localResults = searchLocalAddresses(address);
+                if (localResults.length > 0) {
+                    displayLocalResults(localResults, address);
+                    statusDiv.textContent = `Found ${localResults.length} exact match(es) in Orange County database ✓`;
+                    statusDiv.style.color = 'green';
+                    return;
+                }
+            }
+            
+            statusDiv.textContent = 'Searching online geocoding service...';
+            
+            try {
+                const geocodeUrl = 'https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/findAddressCandidates';
+                
+                const params = new URLSearchParams({
+                    SingleLine: address + ', Florida',
+                    f: 'json',
+                    outSR: '4326',
+                    outFields: '*',
+                    maxLocations: 10,
+                    searchExtent: '-81.65,28.35,-81.05,28.85',
+                    location: '-81.3792,28.5383',
+                    category: 'Address',
+                    countryCode: 'USA'
+                });
+                
+                const response = await fetch(`${geocodeUrl}?${params}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error.message || 'Geocoding error');
+                }
+                
+                if (data.candidates && data.candidates.length > 0) {
+                    const orangeCountyResults = data.candidates.filter(c => {
+                        const attrs = c.attributes;
+                        return (attrs.Region === 'Florida' || attrs.RegionAbbr === 'FL') &&
+                               c.score >= 80;
+                    });
+                    
+                    if (orangeCountyResults.length > 0) {
+                        displayGeocodeResults(orangeCountyResults, address);
+                        statusDiv.textContent = `Found ${orangeCountyResults.length} result(s) via online geocoding`;
+                        statusDiv.style.color = '#ffa500';
+                        return;
+                    }
+                }
+                
+                statusDiv.textContent = 'No results found. Try: "1234 Main St" or "1234 Main St, Orlando"';
+                statusDiv.style.color = 'red';
+                
+            } catch (error) {
+                console.error('Search error:', error);
+                statusDiv.textContent = 'Search error: ' + error.message;
+                statusDiv.style.color = 'red';
+            }
+        });
+
+        document.getElementById('addressSearch').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('searchBtn').click();
+            }
+        });
+
+        document.getElementById('drawParkingLotBtn').addEventListener('click', function() {
+            if (parkingLotPolygon) {
+                map.removeLayer(parkingLotPolygon);
+                parkingLotPolygon = null;
+            }
+
+            const polygon = new L.Draw.Polygon(map);
+            polygon.enable();
+
+            map.once('draw:created', function(e) {
+                parkingLotPolygon = e.layer;
+                parkingLotPolygon.setStyle({
+                    color: '#0066ff',
+                    weight: 2,
+                    fillOpacity: 0.2
+                });
+                map.addLayer(parkingLotPolygon);
+                
+                document.getElementById('analyzeBtn').disabled = false;
+                document.getElementById('analysisInfo').textContent = 'Ready to analyze!';
+                showMessage('Parking lot area defined!', 'success');
+            });
+        });
+
+        document.getElementById('analyzeBtn').addEventListener('click', analyzeParkingLot);
+
+        document.getElementById('clearAllBtn').addEventListener('click', function() {
+            if (parkingLotPolygon) {
+                map.removeLayer(parkingLotPolygon);
+                parkingLotPolygon = null;
+            }
+            
+            resultMarkers.forEach(marker => map.removeLayer(marker));
+            resultMarkers = [];
+            analysisResults = [];
+            
+            document.getElementById('resultsPanel').classList.remove('show');
+            document.getElementById('analyzeBtn').disabled = true;
+            document.getElementById('analysisInfo').textContent = 'Draw a parking lot first';
+            
+            showMessage('All cleared', 'success');
+        });
+
+        document.getElementById('closeResultsBtn').addEventListener('click', function() {
+            document.getElementById('resultsPanel').classList.remove('show');
+        });
+
+        document.addEventListener('click', function(e) {
+            if (!e.target.closest('.control-group')) {
+                document.getElementById('searchResults').style.display = 'none';
+            }
+        });
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initMap);
+        } else {
+            initMap();
+        }
+    </script>
+</body>
+</html>
