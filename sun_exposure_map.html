@@ -782,6 +782,27 @@
             return meters / 0.3048;
         }
 
+        // Helper function to get color based on sun exposure (red=low, yellow=medium, green=high)
+        function getSunExposureColor(exposurePercent) {
+            // Clamp between 0 and 100
+            const percent = Math.max(0, Math.min(100, exposurePercent));
+
+            let r, g, b;
+            if (percent < 50) {
+                // Red to Yellow (0-50%)
+                r = 255;
+                g = Math.round((percent / 50) * 255);
+                b = 0;
+            } else {
+                // Yellow to Green (50-100%)
+                r = Math.round((1 - (percent - 50) / 50) * 255);
+                g = 255;
+                b = 0;
+            }
+
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+
         // Helper function to get rotated trailer corners
         function getRotatedTrailerCorners(centerLat, centerLng, length, width, angleDegrees, metersPerDegreeLat, metersPerDegreeLng) {
             const angleRad = angleDegrees * Math.PI / 180;
@@ -1045,10 +1066,11 @@
 
                 const rankClass = index < 3 ? 'top' : '';
                 const orientationLabel = result.orientation !== undefined ? `${result.orientation}°` : 'N/A';
+                const exposureColor = getSunExposureColor(result.sunExposure);
 
                 item.innerHTML = `
                     <span class="result-rank ${rankClass}">#${result.rank}</span>
-                    <div class="result-exposure">${result.sunExposure.toFixed(1)}% Sun Exposure</div>
+                    <div class="result-exposure" style="color: ${exposureColor};">${result.sunExposure.toFixed(1)}% Sun Exposure</div>
                     <div>≈ ${result.hoursOfSun.toFixed(1)} hours/day of direct sun</div>
                     <div><strong>Orientation:</strong> ${orientationLabel}</div>
                     <div class="result-coords">
@@ -1064,14 +1086,15 @@
 
                 resultsList.appendChild(item);
 
-                // Use polygon for rotated shapes instead of rectangle
+                // Use polygon for rotated shapes with red-green gradient based on sun exposure
+                const markerColor = getSunExposureColor(result.sunExposure);
                 const marker = L.polygon(
                     result.corners.map(c => [c.lat, c.lng]),
                     {
-                        color: index === 0 ? '#ff0000' : '#ff6600',
+                        color: index === 0 ? '#000000' : markerColor,  // Black border for #1, gradient for others
                         weight: index === 0 ? 3 : 2,
-                        fillOpacity: 0.3,
-                        fillColor: index === 0 ? '#ff0000' : '#ff6600'
+                        fillOpacity: 0.5,
+                        fillColor: markerColor
                     }
                 ).addTo(map);
 
