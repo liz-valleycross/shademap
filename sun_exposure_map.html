@@ -782,6 +782,35 @@
             return meters / 0.3048;
         }
 
+        // Helper function to get rotated trailer corners
+        function getRotatedTrailerCorners(centerLat, centerLng, length, width, angleDegrees, metersPerDegreeLat, metersPerDegreeLng) {
+            const angleRad = angleDegrees * Math.PI / 180;
+            const cos = Math.cos(angleRad);
+            const sin = Math.sin(angleRad);
+
+            // Half dimensions
+            const halfLength = length / 2;
+            const halfWidth = width / 2;
+
+            // Corner offsets in meters (relative to center)
+            const corners = [
+                { dx: -halfLength, dy: -halfWidth },  // bottom-left
+                { dx: halfLength, dy: -halfWidth },   // bottom-right
+                { dx: halfLength, dy: halfWidth },    // top-right
+                { dx: -halfLength, dy: halfWidth }    // top-left
+            ];
+
+            // Rotate and convert to lat/lng
+            return corners.map(c => {
+                const rotatedX = c.dx * cos - c.dy * sin;
+                const rotatedY = c.dx * sin + c.dy * cos;
+                return L.latLng(
+                    centerLat + rotatedY / metersPerDegreeLat,
+                    centerLng + rotatedX / metersPerDegreeLng
+                );
+            });
+        }
+
         async function analyzeParkingLot() {
             if (!parkingLotPolygon) {
                 showMessage('Please draw a parking lot area first', 'error');
@@ -823,35 +852,43 @@
             const latStep = gridRes / metersPerDegreeLat;
             const lngStep = gridRes / metersPerDegreeLng;
 
+            // Test multiple orientations: 0°, 45°, 90°, 135°
+            const orientations = [0, 45, 90, 135];
+
             for (let testLat = minLat; testLat <= maxLat; testLat += latStep) {
                 for (let lng = minLng; lng <= maxLng; lng += lngStep) {
-                    const point = L.latLng(testLat, lng);
-                    
-                    const trailerCorners = [
-                        L.latLng(testLat, lng),
-                        L.latLng(testLat + (trailerLength / metersPerDegreeLat), lng),
-                        L.latLng(testLat + (trailerLength / metersPerDegreeLat), lng + (trailerWidth / metersPerDegreeLng)),
-                        L.latLng(testLat, lng + (trailerWidth / metersPerDegreeLng))
-                    ];
+                    // Calculate center point for this grid position
+                    const centerLat = testLat + (trailerLength / metersPerDegreeLat / 2);
+                    const centerLng = lng + (trailerWidth / metersPerDegreeLng / 2);
 
-                    const allCornersInside = trailerCorners.every(corner => 
-                        isPointInPolygon(corner, latLngs)
-                    );
+                    // Test each orientation
+                    for (const angle of orientations) {
+                        const trailerCorners = getRotatedTrailerCorners(
+                            centerLat, centerLng,
+                            trailerLength, trailerWidth,
+                            angle,
+                            metersPerDegreeLat, metersPerDegreeLng
+                        );
 
-                    if (allCornersInside) {
-                        testPoints.push({
-                            lat: testLat,
-                            lng: lng,
-                            center: L.latLng(testLat + (trailerLength / metersPerDegreeLat / 2), 
-                                           lng + (trailerWidth / metersPerDegreeLng / 2)),
-                            corners: trailerCorners
-                        });
+                        const allCornersInside = trailerCorners.every(corner =>
+                            isPointInPolygon(corner, latLngs)
+                        );
+
+                        if (allCornersInside) {
+                            testPoints.push({
+                                lat: testLat,
+                                lng: lng,
+                                center: L.latLng(centerLat, centerLng),
+                                corners: trailerCorners,
+                                orientation: angle
+                            });
+                        }
                     }
                 }
             }
 
-            document.getElementById('analysisProgress').textContent = 
-                `Analyzing ${testPoints.length} possible positions using Shadow Map API...`;
+            document.getElementById('analysisProgress').textContent =
+                `Analyzing ${testPoints.length} possible positions (${orientations.length} orientations each) using Shadow Map API...`;
 
             const results = await calculateRealSunExposure(testPoints, apiKey);
 
@@ -948,6 +985,7 @@
                                 lng: point.lng,
                                 center: point.center,
                                 corners: point.corners,
+                                orientation: point.orientation || 0,
                                 sunExposure: Math.min(100, sunExposure),
                                 hoursOfSun: avgHoursPerDay,
                                 totalHours: hoursOfSun
@@ -1004,13 +1042,15 @@
                 const item = document.createElement('div');
                 item.className = 'result-item';
                 if (index === 0) item.classList.add('selected');
-                
+
                 const rankClass = index < 3 ? 'top' : '';
-                
+                const orientationLabel = result.orientation !== undefined ? `${result.orientation}°` : 'N/A';
+
                 item.innerHTML = `
                     <span class="result-rank ${rankClass}">#${result.rank}</span>
                     <div class="result-exposure">${result.sunExposure.toFixed(1)}% Sun Exposure</div>
                     <div>≈ ${result.hoursOfSun.toFixed(1)} hours/day of direct sun</div>
+                    <div><strong>Orientation:</strong> ${orientationLabel}</div>
                     <div class="result-coords">
                         ${result.center.lat.toFixed(6)}, ${result.center.lng.toFixed(6)}
                     </div>
@@ -1024,20 +1064,22 @@
 
                 resultsList.appendChild(item);
 
-                const marker = L.rectangle([
-                    [result.corners[0].lat, result.corners[0].lng],
-                    [result.corners[2].lat, result.corners[2].lng]
-                ], {
-                    color: index === 0 ? '#ff0000' : '#ff6600',
-                    weight: index === 0 ? 3 : 2,
-                    fillOpacity: 0.3,
-                    fillColor: index === 0 ? '#ff0000' : '#ff6600'
-                }).addTo(map);
+                // Use polygon for rotated shapes instead of rectangle
+                const marker = L.polygon(
+                    result.corners.map(c => [c.lat, c.lng]),
+                    {
+                        color: index === 0 ? '#ff0000' : '#ff6600',
+                        weight: index === 0 ? 3 : 2,
+                        fillOpacity: 0.3,
+                        fillColor: index === 0 ? '#ff0000' : '#ff6600'
+                    }
+                ).addTo(map);
 
                 marker.bindPopup(`
                     <strong>Spot #${result.rank}</strong><br>
                     Sun Exposure: ${result.sunExposure.toFixed(1)}%<br>
-                    Hours/day: ${result.hoursOfSun.toFixed(1)}
+                    Hours/day: ${result.hoursOfSun.toFixed(1)}<br>
+                    Orientation: ${orientationLabel}
                 `);
 
                 if (index === 0) {
