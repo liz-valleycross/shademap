@@ -970,11 +970,9 @@
                         console.log(`Point ${i}: pixel(${pixelPoint.x}, ${pixelPoint.y}) -> hoursOfSun: ${hoursOfSun}`);
 
                         if (hoursOfSun !== null && hoursOfSun !== undefined && !isNaN(hoursOfSun)) {
-                            const totalPossibleHours = (endDate - startDate) / (1000 * 60 * 60);
-                            const daylightHours = totalPossibleHours * 0.5;
-                            const sunExposure = (hoursOfSun / daylightHours) * 100;
-
-                            const avgHoursPerDay = hoursOfSun / ((endDate - startDate) / (1000 * 60 * 60 * 24));
+                            // Calculate sun exposure as percentage of the specified time window
+                            const totalWindowHours = (endDate - startDate) / (1000 * 60 * 60);
+                            const sunExposure = (hoursOfSun / totalWindowHours) * 100;
 
                             results.push({
                                 rank: 0,
@@ -984,8 +982,8 @@
                                 corners: point.corners,
                                 orientation: point.orientation || 0,
                                 sunExposure: Math.min(100, sunExposure),
-                                hoursOfSun: avgHoursPerDay,
-                                totalHours: hoursOfSun
+                                hoursOfSun: hoursOfSun,  // Actual hours of sun in the time window
+                                totalWindowHours: totalWindowHours  // Total hours in the time window
                             });
                         } else {
                             console.warn(`Point ${i}: getHoursOfSun returned invalid value: ${hoursOfSun}`);
@@ -1108,7 +1106,7 @@
                 item.innerHTML = `
                     <span class="result-rank ${rankClass}">#${result.rank}</span>
                     <div class="result-exposure" style="color: ${exposureColor};">${result.sunExposure.toFixed(1)}% Sun Exposure</div>
-                    <div>≈ ${result.hoursOfSun.toFixed(1)} hours/day of direct sun</div>
+                    <div>${result.hoursOfSun.toFixed(1)} hrs sun / ${result.totalWindowHours.toFixed(1)} hrs window</div>
                     <div><strong>Orientation:</strong> ${orientationLabel}</div>
                     <div class="result-coords">
                         ${result.center.lat.toFixed(6)}, ${result.center.lng.toFixed(6)}
@@ -1138,7 +1136,7 @@
                 marker.bindPopup(`
                     <strong>Spot #${result.rank}</strong><br>
                     Sun Exposure: ${result.sunExposure.toFixed(1)}%<br>
-                    Hours/day: ${result.hoursOfSun.toFixed(1)}<br>
+                    ${result.hoursOfSun.toFixed(1)} hrs / ${result.totalWindowHours.toFixed(1)} hrs<br>
                     Orientation: ${orientationLabel}
                 `);
 
