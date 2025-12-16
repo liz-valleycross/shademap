@@ -807,11 +807,12 @@
             
             try {
                 const analysisShadeMap = L.shadeMap(shadeMapConfig).addTo(map);
-                
-                document.getElementById('analysisProgress').textContent = 
+
+                document.getElementById('analysisProgress').textContent =
                     'Waiting for shadow data to load...';
-                
-                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                // Wait for the 'idle' event which fires when the shadow layer has finished rendering
+                await new Promise(resolve => analysisShadeMap.on('idle', resolve));
                 
                 const results = [];
                 const maxPoints = Math.min(points.length, 50);
