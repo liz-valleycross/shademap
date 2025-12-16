@@ -867,7 +867,7 @@
                 }
 
                 console.log(`Analysis complete. ${results.length} valid results out of ${maxPoints} points.`);
-                analysisShadeMap.remove();
+                map.removeLayer(analysisShadeMap);
                 
                 results.sort((a, b) => b.sunExposure - a.sunExposure);
                 results.forEach((result, index) => {
@@ -1035,7 +1035,7 @@
 
             if (shadeMapLayer) {
                 try {
-                    shadeMapLayer.remove();
+                    map.removeLayer(shadeMapLayer);
                 } catch (e) {
                     console.log('Error removing previous shade map:', e);
                 }
@@ -1106,7 +1106,7 @@
         document.getElementById('removeShadeBtn').addEventListener('click', function() {
             if (shadeMapLayer) {
                 try {
-                    shadeMapLayer.remove();
+                    map.removeLayer(shadeMapLayer);
                     shadeMapLayer = null;
                     showMessage('Overlay removed', 'success');
                     this.style.display = 'none';
