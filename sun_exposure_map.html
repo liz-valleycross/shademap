@@ -290,6 +290,26 @@
             flex: 1;
             margin-bottom: 0;
         }
+        .rank-label {
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 12px;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        .rank-label.top-rank {
+            background: #28a745;
+            width: 28px;
+            height: 28px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -857,11 +877,33 @@
                             metersPerDegreeLat, metersPerDegreeLng
                         );
 
+                        // Check if rectangle is completely inside the parking lot
+                        // For concave shapes, we need to check both:
+                        // 1. All corners are inside the polygon
+                        // 2. No edges of the rectangle cross the polygon boundary
                         const allCornersInside = trailerCorners.every(corner =>
                             isPointInPolygon(corner, latLngs)
                         );
 
+                        // Check if any rectangle edge crosses any parking lot edge
+                        let edgesCrossBoundary = false;
                         if (allCornersInside) {
+                            for (let i = 0; i < trailerCorners.length && !edgesCrossBoundary; i++) {
+                                const rectEdgeStart = trailerCorners[i];
+                                const rectEdgeEnd = trailerCorners[(i + 1) % trailerCorners.length];
+
+                                for (let j = 0; j < latLngs.length && !edgesCrossBoundary; j++) {
+                                    const polyEdgeStart = latLngs[j];
+                                    const polyEdgeEnd = latLngs[(j + 1) % latLngs.length];
+
+                                    if (doLinesIntersect(rectEdgeStart, rectEdgeEnd, polyEdgeStart, polyEdgeEnd)) {
+                                        edgesCrossBoundary = true;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (allCornersInside && !edgesCrossBoundary) {
                             testPoints.push({
                                 lat: testLat,
                                 lng: lng,
@@ -1151,7 +1193,7 @@
 
                 // Use polygon for rotated shapes with red-green gradient based on sun exposure
                 const markerColor = getSunExposureColor(result.sunExposure);
-                const marker = L.polygon(
+                const polygon = L.polygon(
                     result.corners.map(c => [c.lat, c.lng]),
                     {
                         color: index === 0 ? '#000000' : markerColor,  // Black border for #1, gradient for others
@@ -1161,18 +1203,29 @@
                     }
                 ).addTo(map);
 
-                marker.bindPopup(`
+                polygon.bindPopup(`
                     <strong>Spot #${result.rank}</strong><br>
                     Sun Exposure: ${result.sunExposure.toFixed(1)}%<br>
                     ${result.hoursOfSun.toFixed(1)} hrs / ${result.totalWindowHours.toFixed(1)} hrs<br>
                     Orientation: ${orientationLabel}
                 `);
 
+                // Add rank number label at center of polygon
+                const rankIcon = L.divIcon({
+                    className: 'rank-label-container',
+                    html: `<div class="rank-label ${index === 0 ? 'top-rank' : ''}">${result.rank}</div>`,
+                    iconSize: [index === 0 ? 28 : 24, index === 0 ? 28 : 24],
+                    iconAnchor: [index === 0 ? 14 : 12, index === 0 ? 14 : 12]
+                });
+                const rankLabel = L.marker(result.center, { icon: rankIcon, interactive: false }).addTo(map);
+
                 if (index === 0) {
-                    marker.openPopup();
+                    polygon.openPopup();
                 }
 
-                resultMarkers.push(marker);
+                // Store both polygon and label for cleanup
+                resultMarkers.push(polygon);
+                resultMarkers.push(rankLabel);
             });
 
             document.getElementById('resultsPanel').classList.add('show');
@@ -1184,21 +1237,29 @@
 
         function highlightSpotOnMap(result) {
             map.setView(result.center, 20);
-            
-            resultMarkers.forEach((marker, index) => {
-                if (analysisResults[index] === result) {
-                    marker.setStyle({
-                        color: '#ff0000',
-                        weight: 3,
-                        fillOpacity: 0.5
-                    });
-                    marker.openPopup();
-                } else {
-                    marker.setStyle({
-                        color: '#ff6600',
-                        weight: 2,
-                        fillOpacity: 0.3
-                    });
+
+            // resultMarkers now contains both polygons and labels (2 per result)
+            // Polygons are at even indices, labels at odd indices
+            analysisResults.forEach((res, resultIndex) => {
+                const polygonIndex = resultIndex * 2;
+                const polygon = resultMarkers[polygonIndex];
+
+                if (polygon && polygon.setStyle) {
+                    if (res === result) {
+                        polygon.setStyle({
+                            color: '#ff0000',
+                            weight: 3,
+                            fillOpacity: 0.5
+                        });
+                        polygon.openPopup();
+                    } else {
+                        const markerColor = getSunExposureColor(res.sunExposure);
+                        polygon.setStyle({
+                            color: markerColor,
+                            weight: 2,
+                            fillOpacity: 0.3
+                        });
+                    }
                 }
             });
         }
