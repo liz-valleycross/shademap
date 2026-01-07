@@ -825,6 +825,30 @@
             });
         }
 
+        // Helper function to get sample points across the trailer for accurate shading calculation
+        // Returns center + 4 corners + 4 edge midpoints = 9 sample points
+        function getTrailerSamplePoints(center, corners) {
+            const samplePoints = [center];  // Start with center
+
+            // Add all 4 corners
+            for (const corner of corners) {
+                samplePoints.push(corner);
+            }
+
+            // Add midpoints of each edge for better coverage
+            for (let i = 0; i < corners.length; i++) {
+                const c1 = corners[i];
+                const c2 = corners[(i + 1) % corners.length];
+                const midpoint = L.latLng(
+                    (c1.lat + c2.lat) / 2,
+                    (c1.lng + c2.lng) / 2
+                );
+                samplePoints.push(midpoint);
+            }
+
+            return samplePoints;  // 9 points total
+        }
+
         async function analyzeParkingLot() {
             if (!parkingLotPolygon) {
                 showMessage('Please draw a parking lot area first', 'error');
@@ -1017,15 +1041,31 @@
                         `Analyzing position ${i + 1} of ${maxPoints} (${points.length} total available)...`;
 
                     try {
-                        const pixelPoint = map.latLngToContainerPoint(point.center);
-                        const hoursOfSun = analysisShadeMap.getHoursOfSun(pixelPoint.x, pixelPoint.y);
+                        // Sample multiple points across the trailer to account for building shadows
+                        // This ensures shadows from nearby structures are properly considered
+                        const samplePoints = getTrailerSamplePoints(point.center, point.corners);
+                        const sunHoursArray = [];
 
-                        console.log(`Point ${i}: pixel(${pixelPoint.x}, ${pixelPoint.y}) -> hoursOfSun: ${hoursOfSun}`);
+                        for (const samplePoint of samplePoints) {
+                            const pixelPoint = map.latLngToContainerPoint(samplePoint);
+                            const hours = analysisShadeMap.getHoursOfSun(pixelPoint.x, pixelPoint.y);
+                            if (hours !== null && hours !== undefined && !isNaN(hours)) {
+                                sunHoursArray.push(hours);
+                            }
+                        }
 
-                        if (hoursOfSun !== null && hoursOfSun !== undefined && !isNaN(hoursOfSun)) {
+                        if (sunHoursArray.length > 0) {
+                            // Use the average of all sample points for a more accurate representation
+                            // of how much sun the entire trailer receives (accounting for building shadows)
+                            const avgHoursOfSun = sunHoursArray.reduce((a, b) => a + b, 0) / sunHoursArray.length;
+                            const minHoursOfSun = Math.min(...sunHoursArray);
+                            const maxHoursOfSun = Math.max(...sunHoursArray);
+
+                            console.log(`Point ${i}: sampled ${sunHoursArray.length} points, avg: ${avgHoursOfSun.toFixed(2)}, min: ${minHoursOfSun.toFixed(2)}, max: ${maxHoursOfSun.toFixed(2)}`);
+
                             // Calculate sun exposure as percentage of the specified time window
                             const totalWindowHours = (endDate - startDate) / (1000 * 60 * 60);
-                            const sunExposure = (hoursOfSun / totalWindowHours) * 100;
+                            const sunExposure = (avgHoursOfSun / totalWindowHours) * 100;
 
                             results.push({
                                 rank: 0,
@@ -1035,11 +1075,13 @@
                                 corners: point.corners,
                                 orientation: point.orientation || 0,
                                 sunExposure: Math.min(100, sunExposure),
-                                hoursOfSun: hoursOfSun,  // Actual hours of sun in the time window
+                                hoursOfSun: avgHoursOfSun,  // Average hours of sun across trailer
+                                minHoursOfSun: minHoursOfSun,  // Minimum (most shaded point)
+                                maxHoursOfSun: maxHoursOfSun,  // Maximum (least shaded point)
                                 totalWindowHours: totalWindowHours  // Total hours in the time window
                             });
                         } else {
-                            console.warn(`Point ${i}: getHoursOfSun returned invalid value: ${hoursOfSun}`);
+                            console.warn(`Point ${i}: no valid sun hours from ${samplePoints.length} sample points`);
                         }
                     } catch (error) {
                         console.error(`Error analyzing point ${i}:`, error);
@@ -1180,10 +1222,16 @@
                 const orientationLabel = result.orientation !== undefined ? `${result.orientation}°` : 'N/A';
                 const exposureColor = getSunExposureColor(result.sunExposure);
 
+                // Check for shading variation across the trailer
+                const minHrsItem = result.minHoursOfSun || result.hoursOfSun;
+                const maxHrsItem = result.maxHoursOfSun || result.hoursOfSun;
+                const hasVariationItem = Math.abs(maxHrsItem - minHrsItem) > 0.5;
+
                 item.innerHTML = `
                     <span class="result-rank ${rankClass}">#${result.rank}</span>
                     <div class="result-exposure" style="color: ${exposureColor};">${result.sunExposure.toFixed(1)}% Sun Exposure</div>
-                    <div>${result.hoursOfSun.toFixed(1)} hrs sun / ${result.totalWindowHours.toFixed(1)} hrs window</div>
+                    <div>${result.hoursOfSun.toFixed(1)} hrs avg / ${result.totalWindowHours.toFixed(1)} hrs window</div>
+                    ${hasVariationItem ? `<div style="font-size: 11px; color: #666;">Shading range: ${minHrsItem.toFixed(1)} - ${maxHrsItem.toFixed(1)} hrs</div>` : ''}
                     <div><strong>Orientation:</strong> ${orientationLabel}</div>
                     <div class="result-coords">
                         ${result.center.lat.toFixed(6)}, ${result.center.lng.toFixed(6)}
@@ -1210,10 +1258,16 @@
                     }
                 ).addTo(map);
 
+                // Show shading variation if there's significant difference across the trailer
+                const minHrs = result.minHoursOfSun || result.hoursOfSun;
+                const maxHrs = result.maxHoursOfSun || result.hoursOfSun;
+                const hasVariation = Math.abs(maxHrs - minHrs) > 0.5;  // More than 30 min difference
+
                 polygon.bindPopup(`
                     <strong>Spot #${result.rank}</strong><br>
                     Sun Exposure: ${result.sunExposure.toFixed(1)}%<br>
-                    ${result.hoursOfSun.toFixed(1)} hrs / ${result.totalWindowHours.toFixed(1)} hrs<br>
+                    ${result.hoursOfSun.toFixed(1)} hrs avg / ${result.totalWindowHours.toFixed(1)} hrs window<br>
+                    ${hasVariation ? `<span style="color: #888; font-size: 11px;">(Range: ${minHrs.toFixed(1)} - ${maxHrs.toFixed(1)} hrs due to shading)</span><br>` : ''}
                     Orientation: ${orientationLabel}
                 `);
 
@@ -1567,7 +1621,7 @@
             }
 
             // Create CSV header
-            const headers = ['Rank', 'Latitude', 'Longitude', 'Sun Exposure %', 'Hours of Sun', 'Total Window Hours', 'Orientation (degrees)'];
+            const headers = ['Rank', 'Latitude', 'Longitude', 'Sun Exposure %', 'Avg Hours of Sun', 'Min Hours of Sun', 'Max Hours of Sun', 'Total Window Hours', 'Orientation (degrees)'];
             const csvRows = [headers.join(',')];
 
             // Add data rows
@@ -1578,6 +1632,8 @@
                     result.center.lng.toFixed(8),
                     result.sunExposure.toFixed(2),
                     result.hoursOfSun.toFixed(2),
+                    (result.minHoursOfSun || result.hoursOfSun).toFixed(2),
+                    (result.maxHoursOfSun || result.hoursOfSun).toFixed(2),
                     result.totalWindowHours.toFixed(2),
                     result.orientation || 0
                 ];
