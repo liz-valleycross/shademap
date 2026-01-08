@@ -825,6 +825,164 @@
             });
         }
 
+        // Check if a point is inside any building polygon (for debugging)
+        function isPointInAnyBuilding(point, buildings) {
+            if (!buildings || buildings.length === 0) return false;
+
+            for (const building of buildings) {
+                if (!building.geometry) continue;
+
+                const geomType = building.geometry.type;
+                let coords;
+
+                if (geomType === 'Polygon') {
+                    coords = building.geometry.coordinates[0]; // Outer ring
+                    if (isPointInGeoJSONPolygon(point, coords)) return true;
+                } else if (geomType === 'MultiPolygon') {
+                    for (const polygon of building.geometry.coordinates) {
+                        coords = polygon[0]; // Outer ring of each polygon
+                        if (isPointInGeoJSONPolygon(point, coords)) return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // Check if point is inside a GeoJSON polygon (coordinates in [lng, lat] format)
+        function isPointInGeoJSONPolygon(point, coords) {
+            const x = point.lng;
+            const y = point.lat;
+            let inside = false;
+
+            for (let i = 0, j = coords.length - 1; i < coords.length; j = i++) {
+                const xi = coords[i][0], yi = coords[i][1];
+                const xj = coords[j][0], yj = coords[j][1];
+
+                if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) {
+                    inside = !inside;
+                }
+            }
+            return inside;
+        }
+
+        // Calculate sun position (azimuth and altitude) for a given date and location
+        function getSunPosition(date, lat, lng) {
+            // Simplified sun position calculation
+            const dayOfYear = Math.floor((date - new Date(date.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+            const hour = date.getHours() + date.getMinutes() / 60;
+
+            // Solar declination (approximate)
+            const declination = 23.45 * Math.sin((360 / 365) * (dayOfYear - 81) * Math.PI / 180);
+
+            // Hour angle
+            const solarNoon = 12; // Simplified, assumes local solar noon at 12:00
+            const hourAngle = (hour - solarNoon) * 15; // degrees
+
+            // Convert to radians
+            const latRad = lat * Math.PI / 180;
+            const decRad = declination * Math.PI / 180;
+            const haRad = hourAngle * Math.PI / 180;
+
+            // Solar altitude
+            const sinAlt = Math.sin(latRad) * Math.sin(decRad) +
+                          Math.cos(latRad) * Math.cos(decRad) * Math.cos(haRad);
+            const altitude = Math.asin(sinAlt) * 180 / Math.PI;
+
+            // Solar azimuth
+            const cosAz = (Math.sin(decRad) - Math.sin(latRad) * sinAlt) /
+                         (Math.cos(latRad) * Math.cos(altitude * Math.PI / 180));
+            let azimuth = Math.acos(Math.max(-1, Math.min(1, cosAz))) * 180 / Math.PI;
+            if (hourAngle > 0) azimuth = 360 - azimuth;
+
+            return { azimuth, altitude };
+        }
+
+        // Check if a point is in shadow from buildings at a given time
+        function isPointInBuildingShadow(point, buildings, sunAzimuth, sunAltitude) {
+            if (sunAltitude <= 0) return true; // Sun below horizon = full shadow
+
+            // Convert sun position to shadow direction
+            const azimuthRad = sunAzimuth * Math.PI / 180;
+            const altitudeRad = sunAltitude * Math.PI / 180;
+
+            // Shadow extends in opposite direction of sun
+            const shadowDirX = -Math.sin(azimuthRad);
+            const shadowDirY = -Math.cos(azimuthRad);
+
+            // Shadow length multiplier based on sun altitude
+            const shadowMultiplier = 1 / Math.tan(altitudeRad);
+
+            const metersPerDegreeLat = 111320;
+            const metersPerDegreeLng = 111320 * Math.cos(point.lat * Math.PI / 180);
+
+            for (const building of buildings) {
+                if (!building.geometry || !building.properties) continue;
+
+                const height = building.properties.height || building.properties.render_height || 8;
+                const shadowLength = height * shadowMultiplier;
+
+                // Get building polygon
+                const geomType = building.geometry.type;
+                let polygons = [];
+
+                if (geomType === 'Polygon') {
+                    polygons.push(building.geometry.coordinates[0]);
+                } else if (geomType === 'MultiPolygon') {
+                    for (const poly of building.geometry.coordinates) {
+                        polygons.push(poly[0]);
+                    }
+                }
+
+                for (const coords of polygons) {
+                    // Create shadow polygon by projecting building footprint
+                    const shadowPolygon = [];
+
+                    // Add original building footprint
+                    for (const coord of coords) {
+                        shadowPolygon.push([coord[0], coord[1]]);
+                    }
+
+                    // Add shadow projection points
+                    for (let i = coords.length - 1; i >= 0; i--) {
+                        const coord = coords[i];
+                        const projectedLng = coord[0] + (shadowDirX * shadowLength) / metersPerDegreeLng;
+                        const projectedLat = coord[1] + (shadowDirY * shadowLength) / metersPerDegreeLat;
+                        shadowPolygon.push([projectedLng, projectedLat]);
+                    }
+
+                    // Check if point is in the shadow polygon
+                    if (isPointInGeoJSONPolygon(point, shadowPolygon)) {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        // Calculate hours of sun accounting for building shadows
+        function calculateBuildingShadowHours(point, buildings, startDate, endDate, iterations = 32) {
+            const timeStep = (endDate - startDate) / iterations;
+            let hoursInSun = 0;
+
+            for (let i = 0; i < iterations; i++) {
+                const checkTime = new Date(startDate.getTime() + i * timeStep);
+                const sunPos = getSunPosition(checkTime, point.lat, point.lng);
+
+                // Skip if sun is below horizon
+                if (sunPos.altitude <= 0) continue;
+
+                // Check if point is in building shadow at this time
+                const inShadow = isPointInBuildingShadow(point, buildings, sunPos.azimuth, sunPos.altitude);
+
+                if (!inShadow) {
+                    hoursInSun += timeStep / (1000 * 60 * 60); // Convert ms to hours
+                }
+            }
+
+            return hoursInSun;
+        }
+
         // Helper function to get sample points across the trailer for accurate shading calculation
         // Returns center + 4 corners + 4 edge midpoints = 9 sample points
         function getTrailerSamplePoints(center, corners) {
@@ -1045,13 +1203,56 @@
                         // This ensures shadows from nearby structures are properly considered
                         const samplePoints = getTrailerSamplePoints(point.center, point.corners);
                         const sunHoursArray = [];
+                        const sampleDetails = [];
+                        const totalWindowHours = (endDate - startDate) / (1000 * 60 * 60);
 
-                        for (const samplePoint of samplePoints) {
+                        for (let j = 0; j < samplePoints.length; j++) {
+                            const samplePoint = samplePoints[j];
                             const pixelPoint = map.latLngToContainerPoint(samplePoint);
-                            const hours = analysisShadeMap.getHoursOfSun(pixelPoint.x, pixelPoint.y);
-                            if (hours !== null && hours !== undefined && !isNaN(hours)) {
-                                sunHoursArray.push(hours);
+
+                            // Get terrain-based sun hours from the library
+                            const terrainHours = analysisShadeMap.getHoursOfSun(pixelPoint.x, pixelPoint.y);
+
+                            // Calculate building shadow hours using our custom calculation
+                            // This accounts for shadows cast by nearby structures
+                            const buildingShadowHours = calculateBuildingShadowHours(
+                                samplePoint,
+                                buildingFeatures,
+                                startDate,
+                                endDate,
+                                32  // iterations
+                            );
+
+                            // Use the MINIMUM of terrain and building calculations
+                            // Terrain accounts for hills/mountains, buildings account for structures
+                            const effectiveHours = Math.min(
+                                terrainHours || totalWindowHours,
+                                buildingShadowHours
+                            );
+
+                            // Check if point is inside buildings (for debugging)
+                            const isInBuilding = isPointInAnyBuilding(samplePoint, buildingFeatures);
+
+                            sampleDetails.push({
+                                idx: j,
+                                lat: samplePoint.lat.toFixed(6),
+                                lng: samplePoint.lng.toFixed(6),
+                                px: pixelPoint.x,
+                                py: pixelPoint.y,
+                                terrainHours: terrainHours?.toFixed(2),
+                                buildingHours: buildingShadowHours.toFixed(2),
+                                effectiveHours: effectiveHours.toFixed(2),
+                                inBuilding: isInBuilding
+                            });
+
+                            if (effectiveHours !== null && effectiveHours !== undefined && !isNaN(effectiveHours)) {
+                                sunHoursArray.push(effectiveHours);
                             }
+                        }
+
+                        // Log detailed sample info for first few points
+                        if (i < 3) {
+                            console.log(`Point ${i} sample details:`, sampleDetails);
                         }
 
                         if (sunHoursArray.length > 0) {
@@ -1061,10 +1262,9 @@
                             const minHoursOfSun = Math.min(...sunHoursArray);
                             const maxHoursOfSun = Math.max(...sunHoursArray);
 
-                            console.log(`Point ${i}: sampled ${sunHoursArray.length} points, avg: ${avgHoursOfSun.toFixed(2)}, min: ${minHoursOfSun.toFixed(2)}, max: ${maxHoursOfSun.toFixed(2)}`);
+                            console.log(`Point ${i}: sampled ${sunHoursArray.length} points, avg: ${avgHoursOfSun.toFixed(2)}, min: ${minHoursOfSun.toFixed(2)}, max: ${maxHoursOfSun.toFixed(2)}, variance: ${(maxHoursOfSun - minHoursOfSun).toFixed(2)}`);
 
                             // Calculate sun exposure as percentage of the specified time window
-                            const totalWindowHours = (endDate - startDate) / (1000 * 60 * 60);
                             const sunExposure = (avgHoursOfSun / totalWindowHours) * 100;
 
                             results.push({
