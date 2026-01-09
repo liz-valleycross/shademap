@@ -1624,6 +1624,10 @@
                 canvases.forEach(canvas => canvas.remove());
             }
 
+            // Force map to recalculate its size (fixes canvas sizing issues)
+            map.invalidateSize();
+            await new Promise(resolve => setTimeout(resolve, 100));
+
             // Fetch building data from OpenStreetMap
             showMessage('Fetching building data...', 'success');
             const buildingFeatures = await fetchBuildingsFromOSM();
