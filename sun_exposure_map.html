@@ -499,12 +499,12 @@
                     // Try to get height from various OSM tags
                     let height = feature.properties.height;
                     if (!height && feature.properties['building:levels']) {
-                        // Estimate ~3 meters per floor
-                        height = parseFloat(feature.properties['building:levels']) * 3;
+                        // Estimate ~3.5 meters per floor (commercial buildings)
+                        height = parseFloat(feature.properties['building:levels']) * 3.5;
                     }
                     if (!height) {
-                        // Default building height of 8 meters (~2-3 floors)
-                        height = 8;
+                        // Default building height of 12 meters (~3-4 floors, typical commercial)
+                        height = 12;
                     }
 
                     // Parse height if it's a string like "10 m"
@@ -515,6 +515,10 @@
                     feature.properties.height = height;
                     feature.properties.render_height = height;
                 });
+
+                // Log building heights for debugging
+                const heights = geojson.features.map(f => f.properties.height);
+                console.log(`Building heights: min=${Math.min(...heights)}m, max=${Math.max(...heights)}m, avg=${(heights.reduce((a,b)=>a+b,0)/heights.length).toFixed(1)}m`);
 
                 // Cache the results
                 cachedBuildings = geojson.features;
